@@ -1,0 +1,212 @@
+
+
+
+
+--  DECLARE @DATEFROM DATE ={?dateFrom}, @DATETO DATE ={?dateTo},
+--  @DEPARTMENT VARCHAR(100)='{?Department}',@CATEGORY VARCHAR(100)='{?Category}',@ITEMNAME VARCHAR(200)='{?ItemName}',@STORE VARCHAR(10)='{?Whse}'
+ DECLARE @DATEFROM DATE ='2023-04-05', @DATETO DATE ='2023-04-05',
+ @DEPARTMENT VARCHAR(100)='',@CATEGORY VARCHAR(100)='',@ITEMNAME VARCHAR(200)='',@STORE VARCHAR(10)='GSC_DCC'
+
+
+SELECT
+ D.*
+,CASE WHEN D.[DE-AP]<>0 
+THEN convert(varchar(20),OJDT.Number)
+WHEN TYPE='AR RESERVE' AND (SELECT COUNT(BASEENTRY) FROM DLN1 WHERE BaseEntry=D.Transaction# AND DLN1.ItemCode=D.[Item Code])=0
+THEN CONCAT('AR - ',D.Transaction# )
+ELSE convert(varchar(20),D.Number)
+END AS 'JE-COST',
+
+CASE WHEN D.TYPE='AR Credit Memo' 
+	THEN (D.COST*D.[Quantity Sold])*-1 
+	ELSE D.COST*D.[Quantity Sold] 
+END  AS 'Total Cost',
+
+CASE WHEN D.SWW='FREEBIES' AND D.[Total Sales]=0 
+	THEN 0 
+	ELSE 
+		CASE WHEN D.TYPE='AR Credit Memo' 
+		THEN D.[Total Sales]-((D.COST*D.[Quantity Sold])*-1)
+		ELSE D.[Total Sales]-(D.COST*D.[Quantity Sold]) 
+		END
+END AS 'Gross Profit',
+
+CASE WHEN D.SWW='FREEBIES' AND D.[Total Sales]=0 
+	THEN 0 
+	ELSE 
+		CASE WHEN D.TYPE='AR Credit Memo' 
+		THEN (((D.[Total Sales]-((D.COST*D.[Quantity Sold])*-1))/NULLIF(D.[Total Sales], 0))*100)*-1 
+		ELSE ((D.[Total Sales]-(D.COST*D.[Quantity Sold]))/NULLIF(D.[Total Sales], 0))*100 
+		END 
+END AS 'Profit Margin' 
+
+
+FROM(
+--STANDARD AR
+--DROPSHIP
+
+SELECT DISTINCT T2.ItmsGrpNam AS 'Department',T3.CANCELED,T1.SWW,
+CASE WHEN T5.RTYPE IS NOT NULL
+THEN T5.DocEntry
+WHEN T6.RTYPE IS NOT NULL 
+THEN T6.DOCENTRY
+
+END AS 'DE-AP',
+CASE WHEN ISNULL(T5.INMPrice,T6.INMPrice) IS NOT NULL THEN 18 ELSE 0 END AS 'TRANSTYPE',
+T3.BPLID AS 'BRANCH ID',
+CASE 
+	WHEN T3.isIns ='Y' 
+	THEN 'AR RESERVE' 
+	ELSE 'AR INVOICE' 
+END AS 'TYPE',
+T1.U_Category AS 'Category',
+T0.DocEntry AS 'Transaction#',T10.Number,
+T3.DocDate AS 'Posting Date',
+t3.U_DocSeries AS 'Invoice No.',
+CASE 
+    WHEN  T5.DocEntry IS NOT NULL 
+	THEN CONCAT('PO ',T5.DocNum)
+    WHEN T6.RTYPE  IS NOT NULL
+	THEN CONCAT('AP ',T6.DocNum)
+
+	-- WHEN  T5.DocEntry IS NOT NULL AND T5.RTYPE ='AP'
+	-- THEN CONCAT('AP ',T5.DocEntry)
+	-- WHEN T6.RTYPE='AP' AND T6.RefDocNum IS NOT NULL
+	-- THEN CONCAT('AP ',T6.REFDOCNUM)
+	-- WHEN T8.DocEntry IS NOT NULL 
+	-- THEN CONCAT('AP ',T8.DocEntry)
+	-- WHEN T7.DocEntry IS NOT NULL AND T7.RTYPE='AP'
+	-- THEN CONCAT('AP ',T7.DocEntry)
+	ELSE ''
+END AS 'Reference',
+CASE 
+	WHEN  T5.TAXDATE IS NOT NULL
+	THEN CONVERT(VARCHAR(20),T5.TAXDATE,101)
+	WHEN T6.TAXDATE IS NOT NULL
+	THEN CONVERT(VARCHAR(20),T6.TAXDATE,101)
+	-- WHEN T8.TaxDate IS NOT NULL 
+	-- THEN CONVERT(VARCHAR(20),T8.TAXDATE,101)
+	-- WHEN T7.IssueDate IS NOT NULL AND T7.RTYPE='AP'
+	-- THEN CONVERT(VARCHAR(20),T7.IssueDate,101)
+	ELSE ''
+END AS 'ReferenceDate',
+T3.CardName AS 'Customer',
+T4.CardFName AS 'Foreign Name',
+CASE 
+	WHEN T9.Number IS NULL 
+	THEN T3.Comments
+	ELSE
+	CONCAT(T3.Comments,' ; LC: ',T9.Number) 
+END AS 'Comments',
+T0.ocrcode AS 'Whse',
+T0.ItemCode AS 'Item Code',
+T0.unitMsr AS 'unit',
+T0.Dscription AS 'Description',
+(T0.Quantity - ISNULL(T11.Quantity,0))
+-- *(IIF(ISNULL(T5.NumPerMsr,T6.NumPerMsr)>T0.NumPerMsr,ISNULL(T5.NumPerMsr,T6.NumPerMsr),T0.NumPerMsr))
+
+AS 'Quantity Sold',   
+T0.U_GPBD AS 'Price Before Discount',
+T0.PriceAfVAT AS 'Price After Discount',
+T0.INMPrice AS 'Price After Discount(VAT-Ex)',
+CASE 
+    WHEN T5.INMPrice IS NULL
+    THEN IIF(T6.NumPerMsr>T0.NumPerMsr,(T6.INMPrice/T6.NumPerMsr),T6.INMPrice) + ISNULL(((T0.INMPrice*(T0.Quantity - ISNULL(T11.Quantity,0))/T12.[SALES SUM])*T6.[LANDEDCOST])/T0.Quantity - ISNULL(T11.Quantity,0),0)    
+	ELSE IIF(T5.NumPerMsr>T0.NumPerMsr,(T5.INMPrice/T5.NumPerMsr),T5.INMPrice) + ISNULL(((T0.INMPrice*(T0.Quantity - ISNULL(T11.Quantity,0))/T12.[SALES SUM])*T5.[LANDEDCOST])/T0.Quantity - ISNULL(T11.Quantity,0),0)
+    END AS 'COST',
+-- CASE 
+    
+-- 	WHEN T5.INMPrice IS NULL AND T6.INMPrice IS NOT NULL AND T7.INMPrice IS NULL AND T8.INMPrice IS NULL
+-- 	THEN T6.INMPrice + ISNULL(((T0.INMPrice*(T0.Quantity - ISNULL(T11.Quantity,0))/T12.[SALES SUM])*T6.[LANDEDCOST])/T0.Quantity - ISNULL(T11.Quantity,0),0)
+-- 	WHEN T5.INMPrice IS NULL AND T6.INMPrice IS  NULL AND T7.INMPrice IS NOT NULL AND T8.INMPrice IS NULL
+-- 	THEN T7.INMPrice + ISNULL(((T0.INMPrice*(T0.Quantity - ISNULL(T11.Quantity,0))/T12.[SALES SUM])*T7.[LANDEDCOST])/T0.Quantity - ISNULL(T11.Quantity,0),0)
+-- 	WHEN T5.INMPrice IS NULL AND T6.INMPrice IS  NULL AND T7.INMPrice IS NULL AND T8.INMPrice IS NOT NULL
+-- 	THEN T8.INMPrice + ISNULL(((T0.INMPrice*(T0.Quantity - ISNULL(T11.Quantity,0))/T12.[SALES SUM])*T9.[LANDEDCOST])/T0.Quantity - ISNULL(T11.Quantity,0),0)
+-- 	ELSE T5.INMPrice + ISNULL(((T0.INMPrice*(T0.Quantity - ISNULL(T11.Quantity,0))/T12.[SALES SUM])*T5.[LANDEDCOST])/T0.Quantity - ISNULL(T11.Quantity,0),0)
+-- END AS 'COST',
+ 
+T0.INMPrice*(T0.Quantity - ISNULL(T11.Quantity,0))
+AS 'Total Sales'
+
+FROM INV1 T0
+INNER JOIN OITM T1 ON T0.ItemCode = T1.ItemCode
+INNER JOIN OITB T2 ON T1.ItmsGrpCod = T2.ItmsGrpCod
+INNER JOIN OINV T3 ON T0.DocEntry = T3.DocNum
+INNER JOIN OCRD T4 ON T3.CardCode = T4.CardCode
+--VIA PO
+LEFT JOIN (	
+			SELECT TB.NumPerMsr,TA.DocEntry,TC.DocNum,TB.BaseEntry,TC.TaxDate ,TB.Quantity,TB.ItemCode,TB.WhsCode,TB.INMPRICE,TB.DocEntry AS 'PO_#','PO'AS 'RTYPE'
+            , TC.U_ARRASTRE+TC.U_BROKERAGE_FEE+TC.U_DOC_STAMP+TC.U_FREIGHT+TC.U_LABOR+TC.U_INSURANCE+TC.U_TRUCKING+TC.U_WHARFAGE+TC.U_OTHERS AS 'LANDEDCOST'
+            FROM INV21 TA
+            INNER JOIN POR1 TB ON TA.RefDocNum=TB.DocEntry 
+            INNER JOIN OPOR TC ON TB.DocEntry=TC.DocNum
+            WHERE 
+            TA.RefObjType=22
+            AND TC.CANCELED='N'
+            AND TB.TrgetEntry=0
+			)AS T5
+			ON T5.DocEntry=T0.DocEntry
+			AND T5.ItemCode=T0.ItemCode 
+            -- AND T5.WhsCode=T0.WhsCode
+-- --VIA AP
+LEFT JOIN (
+		SELECT TC.NumPerMsr, TA.DocEntry,TD.DocNum,TD.TaxDate ,TC.Quantity,TC.ItemCode,TC.WhsCode,TC.INMPRICE        ,TC.DocEntry AS 'PO_#','AP'AS 'RTYPE'
+        , TD.U_ARRASTRE+TD.U_BROKERAGE_FEE+TD.U_DOC_STAMP+TD.U_FREIGHT+TD.U_LABOR+TD.U_INSURANCE+TD.U_TRUCKING+TD.U_WHARFAGE+TD.U_OTHERS AS 'LANDEDCOST'
+        FROM INV21 TA
+        INNER JOIN POR1 TB ON TA.RefDocNum=TB.DocEntry  
+        INNER JOIN PCH1 TC ON TB.DocEntry=TC.BaseEntry
+        INNER JOIN OPCH TD ON TC.DocEntry=TD.DocNum
+        WHERE 
+        TA.RefObjType=22
+        AND TD.CANCELED='N'
+        ) 
+		AS T6
+		ON T6.DocEntry=T0.DocEntry
+        AND T6.ItemCode=T0.ItemCode
+
+--LANDED COST
+LEFT JOIN (SELECT  A0.DOCENTRY,A1.REFDOCNUM,A0.DocTotal-ISNULL(SUM(A3.DocTotal),0) AS 'LANDEDCOST',A2.Number FROM OPCH A0
+		INNER JOIN PCH21 A1 ON A0.DOCNUM=A1.DocEntry
+		INNER JOIN OJDT A2 ON A0.DocNum=A2.BaseRef AND TransType=18
+		LEFT JOIN (SELECT TT.BaseEntry,DocTotal
+			FROM ORPC T INNER JOIN RPC1 TT ON T.DocNum=TT.DocEntry 
+			WHERE TT.BaseType=18
+			)AS A3 ON A0.DocNum=A3.BaseEntry
+		WHERE A1.RefObjType=13 AND A0.CANCELED='N' AND A0.DocType='S'
+		GROUP BY A0.DOCENTRY,A1.RefObjType,A1.REFDOCNUM,A1.DOCENTRY,A0.DocTotal,A2.Number) 
+		AS T9
+		ON T0.DocEntry=T9.REFDOCNUM 
+--JE
+INNER JOIN OJDT T10 ON T0.DocEntry=T10.BaseRef AND T10.TransType =13
+LEFT JOIN (SELECT A1.QUANTITY,A1.ITEMCODE,A0.RefDocNum FROM IGE21 A0
+		INNER JOIN IGE1 A1 ON A0.DOCENTRY=A1.DOCENTRY
+		WHERE A0.REFOBJTYPE =13) 
+		AS T11 ON T11.REFDOCNUM=T0.DOCENTRY AND T11.ITEMCODE=T0.ITEMCODE
+INNER JOIN (SELECT  DOCENTRY,SUM(A2.INMPrice*(A2.Quantity-ISNULL(A3.Quantity,0))) AS 'SALES SUM' FROM INV1 A2 
+		LEFT JOIN (SELECT B1.QUANTITY,REFDOCNUM,B1.ItemCode FROM IGE21 B0
+					INNER JOIN IGE1 B1 ON B0.DOCENTRY=B1.DOCENTRY
+					WHERE B0.REFOBJTYPE =13)
+					AS A3 ON A2.DocEntry=A3.REFDOCNUM AND A2.ItemCode=A3.ItemCode
+		GROUP BY DOCENTRY)
+		AS T12 ON T0.DocEntry=T12.DocEntry
+
+WHERE T3.DocType = 'I' 
+AND T1.ItemType <> 'F'
+AND T3.DocDate >= @DATEFROM AND T3.DocDate <= @DATETO
+AND T3.CANCELED='N'
+AND T3.ISINS='N'
+AND  T3.U_BO_DRS ='Y' OR T3.U_BO_DSDD ='Y' OR T3.U_BO_DSDV ='Y' OR T3.U_BO_DSPD ='Y' 
+
+
+
+) D
+LEFT JOIN OJDT ON OJDT.BaseRef=D.[DE-AP] AND OJDT.TransType = D.TRANSTYPE
+WHERE D.[Quantity Sold]<>0
+AND D.[BRANCH ID] NOT IN (SELECT BPLId FROM OBPL WHERE U_isDC='Y')
+AND D.Department LIKE '%'+@DEPARTMENT+'%' 
+AND D.Category LIKE '%'+@CATEGORY+'%'
+AND D.Description LIKE '%'+@ITEMNAME+'%'
+AND D.Whse LIKE '%'+@STORE+'%'
+AND D.[Posting Date] BETWEEN @DATEFROM AND  @DATETO
+AND D.CANCELED='N'
+ORDER BY 'Transaction#' ASC

@@ -1,0 +1,176 @@
+
+
+DECLARE @dt as varchar(1) =''
+DECLARE @Branch Varchar(50) = 'ALL BRANCH'
+
+DECLARE @ACCOUNT Varchar(50) = ''
+DECLARE @df date = '2023-01-01'
+DECLARE @dto date = '2023-12-31'
+
+set @branch = replace((@branch),'ALL BRANCH','')
+
+
+SELECT * FROM (
+
+SELECT 
+--DISTINCT
+T0.DOCDATE AS 'Posting Date',
+T0.TAXDATE AS 'Document Date',
+T0.DOCNUM AS 'Payment Voucher #',
+T0.CounterRef AS 'Reference #',
+T0.CARDCODE AS 'Vendor Code',
+T0.CARDNAME AS 'Vendor Name',
+T1.LICTRADNUM AS 'Vendor TIN',
+T3.Account AS 'Account Code',
+T4.AcctName AS 'Account Name',
+T3.DEBIT AS 'PHP Debit',
+T3.CREDIT AS 'PHP Credit',
+T2.Memo AS 'Remarks',
+'APV #' AS 'APV #',
+T3.BPLNAME,
+t2.number
+FROM OVPM T0
+LEFT JOIN OCRD T1 ON T0.CARDCODE = T1.CARDCODE
+INNER JOIN OJDT T2 ON T0.TRANSID = T2.NUMBER 
+INNER JOIN JDT1 T3 ON T2.NUMBER = T3.TRANSID 
+INNER JOIN OACT T4 ON T3.ACCOUNT = T4.AcctCode
+WHERE (T0.CreditSum > 0 OR t0.cashsum > 0) 
+AND 
+T0.CARDNAME NOT LIKE '%DISTRIBUTION CENTER%' 
+AND T0.DOCTYPE <> 'A' 
+-- AND T0.CANCELED = 'N'
+AND T3.TRANSID NOT IN (SELECT T5.TRANSID FROM JDT1 T5 INNER JOIN OACT T6 ON T5.Account = T6.AcctCode WHERE T6.ACCTNAME LIKE '%REVOLV%' )
+AND T3.TRANSID NOT IN (SELECT T7.TRANSID FROM JDT1 T7 INNER JOIN OACT T8 ON T7.Account = T8.AcctCode WHERE T8.DETAILS LIKE '%Merchant%' )
+-- AND T0.CARDCODE  NOT IN (SELECT CARDCODE FROM OCRD WHERE CARDTYPE='S' AND U_TaxPayerClass='Y' AND Affiliate = 'N' )
+AND T0.U_PaymentType = 'RC'
+AND T3.BPLName like  '%'+@Branch+'%'
+AND T3.Account LIKE '%'+@ACCOUNT+'%'
+and t3.TaxDate BETWEEN @df and @dto
+
+UNION ALL
+
+SELECT
+--DISTINCT
+T0.DOCDATE AS 'Posting Date',
+T0.TAXDATE AS 'Document Date',
+T0.DOCNUM AS 'Payment Voucher #',
+T0.CounterRef AS 'Reference #',
+T0.CARDCODE AS 'Vendor Code',
+T0.CARDNAME AS 'Vendor Name',
+T1.LICTRADNUM AS 'Vendor TIN',
+T3.Account AS 'Account Code',
+T4.AcctName AS 'Account Name',
+T3.DEBIT AS 'PHP Debit',
+T3.CREDIT AS 'PHP Credit',
+T2.Memo AS 'Remarks',
+'APV #' AS 'APV #',
+T3.BPLNAME,
+t2.number
+FROM OVPM T0
+LEFT JOIN OCRD T1 ON T0.CARDCODE = T1.CARDCODE
+INNER JOIN OJDT T2 ON T0.DocEntry = T2.BaseRef 
+INNER JOIN JDT1 T3 ON T2.TRANSID = T3.TRANSID 
+INNER JOIN OACT T4 ON T3.ACCOUNT = T4.AcctCode
+WHERE (T0.CreditSum + t0.cashsum) > 0
+
+--T0.CARDNAME NOT LIKE '%DISTRIBUTION CENTER%' AND T0.DOCTYPE <> 'A' AND T0.CANCELED = 'N'
+AND T3.TRANSID NOT IN (SELECT T5.TRANSID FROM JDT1 T5 INNER JOIN OACT T6 ON T5.Account = T6.AcctCode WHERE T6.ACCTNAME LIKE '%REVOLV%' )
+AND T3.TRANSID NOT IN (SELECT T7.TRANSID FROM JDT1 T7 INNER JOIN OACT T8 ON T7.Account = T8.AcctCode WHERE T8.DETAILS LIKE '%Merchant%' )
+-- AND T0.CARDCODE  NOT IN (SELECT CARDCODE FROM OCRD WHERE CARDTYPE='S' AND U_TaxPayerClass='Y' AND Affiliate = 'N' )
+-- AND T0.U_PaymentType ='PE'
+
+AND T0.TransId = T3.TransId 
+AND T4.AcctName NOT LIKE '%TAX%'
+AND T3.BPLName like  '%'+@Branch+'%'
+AND T0.DocType = 'A'
+AND T3.Account LIKE '%'+@ACCOUNT+'%'
+and t3.TaxDate BETWEEN @df and @dto
+
+UNION ALL
+
+SELECT
+--DISTINCT
+T0.DOCDATE AS 'Posting Date',
+T0.TAXDATE AS 'Document Date',
+T0.DOCNUM AS 'Payment Voucher #',
+T0.CounterRef AS 'Reference #',
+T0.CARDCODE AS 'Vendor Code',
+T0.CARDNAME AS 'Vendor Name',
+T1.LICTRADNUM AS 'Vendor TIN',
+T3.Account AS 'Account Code',
+T4.AcctName AS 'Account Name',
+T3.DEBIT AS 'PHP Debit',
+T3.CREDIT AS 'PHP Credit',
+T2.Memo AS 'Remarks',
+'APV #' AS 'APV #',
+T3.BPLNAME,
+t2.number
+FROM OVPM T0
+LEFT JOIN OCRD T1 ON T0.CARDCODE = T1.CARDCODE
+INNER JOIN OJDT T2 ON T0.DocEntry = T2.BaseRef 
+INNER JOIN JDT1 T3 ON T2.TRANSID = T3.TRANSID 
+INNER JOIN OACT T4 ON T3.ACCOUNT = T4.AcctCode
+--WHERE (T0.CreditSum > 0 OR t0.cashsum > 0) 
+WHERE 
+--T0.CARDNAME NOT LIKE '%DISTRIBUTION CENTER%' AND T0.DOCTYPE <> 'A' AND T0.CANCELED = 'N'
+ T3.TRANSID NOT IN (SELECT T5.TRANSID FROM JDT1 T5 INNER JOIN OACT T6 ON T5.Account = T6.AcctCode WHERE T6.ACCTNAME LIKE '%REVOLV%' )
+AND T3.TRANSID NOT IN (SELECT T7.TRANSID FROM JDT1 T7 INNER JOIN OACT T8 ON T7.Account = T8.AcctCode WHERE T8.DETAILS LIKE '%Merchant%' )
+-- AND T0.CARDCODE  NOT IN (SELECT CARDCODE FROM OCRD WHERE CARDTYPE='S' AND U_TaxPayerClass='Y' AND Affiliate = 'N' )
+AND T0.U_PaymentType = 'BT'
+-- AND T0.Canceled = 'N'
+AND T0.TransId = T3.TransId AND T4.AcctName NOT LIKE '%TAX%'
+AND T3.BPLName like  '%'+@Branch+'%'
+AND T0.DocType = 'S'
+AND T3.Account LIKE '%'+@ACCOUNT+'%'
+and t3.TaxDate BETWEEN @df and @dto
+
+
+UNION ALL
+-- PAYMENT IS NOT PE AND WITH JE REVERSAL
+
+SELECT
+--DISTINCT
+T0.DOCDATE AS 'Posting Date',
+T0.TAXDATE AS 'Document Date',
+T0.DOCNUM AS 'Payment Voucher #',
+T0.CounterRef AS 'Reference #',
+T0.CARDCODE AS 'Vendor Code',
+T0.CARDNAME AS 'Vendor Name',
+T1.LICTRADNUM AS 'Vendor TIN',
+T3.Account AS 'Account Code',
+T4.AcctName AS 'Account Name',
+T3.DEBIT AS 'PHP Debit',
+T3.CREDIT AS 'PHP Credit',
+T2.Memo AS 'Remarks',
+'APV #' AS 'APV #',
+T3.BPLNAME,
+t2.number
+FROM OVPM T0
+LEFT JOIN OCRD T1 ON T0.CARDCODE = T1.CARDCODE 
+INNER JOIN JDT1 T3 ON T0.DocNum = T3.BaseRef AND T3.TransType=T0.ObjType 
+INNER JOIN OJDT T2 ON T2.Number = T3.TransId AND T2.stornoToTr IS NOT NULL
+INNER JOIN OACT T4 ON T3.ACCOUNT = T4.AcctCode
+WHERE (T0.CreditSum + t0.cashsum) > 0
+
+--T0.CARDNAME NOT LIKE '%DISTRIBUTION CENTER%' AND T0.DOCTYPE <> 'A' AND T0.CANCELED = 'N'
+AND T3.TRANSID NOT IN (SELECT T5.TRANSID FROM JDT1 T5 INNER JOIN OACT T6 ON T5.Account = T6.AcctCode WHERE T6.ACCTNAME LIKE '%REVOLV%' )
+AND T3.TRANSID NOT IN (SELECT T7.TRANSID FROM JDT1 T7 INNER JOIN OACT T8 ON T7.Account = T8.AcctCode WHERE T8.DETAILS LIKE '%Merchant%' )
+-- AND T0.CARDCODE  NOT IN (SELECT CARDCODE FROM OCRD WHERE CARDTYPE='S' AND U_TaxPayerClass='Y' AND Affiliate = 'N' )
+AND T0.U_PaymentType <>'PE'
+
+AND T4.AcctName NOT LIKE '%TAX%'
+
+AND T3.BPLName like  '%'+@Branch+'%'
+AND T0.DocType IN ('A','C')
+AND T3.Account LIKE '%'+@ACCOUNT+'%'
+and t3.TaxDate BETWEEN @df and @dto
+AND T0.Canceled='Y'
+
+) T
+-- where number IN (75143,72962,73474)
+WHERE [Account Code] LIKE '%'+@ACCOUNT+'%'
+-- where number IN (19303,63024)
+ORDER BY T.[Payment Voucher #] ASC
+
+
+

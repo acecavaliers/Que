@@ -1,0 +1,83 @@
+DECLARE @DocNum int, @Type as int, @CARDCODE AS VARCHAR(20), @WTAX_ACCOUNT AS VARCHAR(50)
+
+SET @Type=$[$20.45.0]
+SET @DocNum=$[$20.1.0]
+SET @CARDCODE =$[$5.0.0]
+SET @WTAX_ACCOUNT = 'CA060-1000-0000' 
+
+IF @Type=13
+	BEGIN 
+	IF $[$20.24.0]=$[$20.7.0]
+			SELECT (wtsum
+				 -ISNULL((SELECT WTAmnt FROM RIN1 T0 INNER JOIN RIN5 T1 ON T0.DocEntry=T1.AbsEntry JOIN ORIN T2 ON T2.DOCNUM = T0.DOCENTRY WHERE T0.BaseEntry=@DocNum AND T2.CANCELED = 'N'),0))
+				-ISNULL((SELECT SUM(U_WTaxPay) FROM RCT2 INNER JOIN ORCT ON ORCT.DocNum=RCT2.DocNum WHERE rct2.DocEntry= @DocNum AND orct.CANCELED='N' ),0)
+				FROM OINV WHERE DocNum=@DocNum
+
+	ELSE
+
+			SELECT (CONVERT(float,REPLACE(REPLACE($[$20.24.0],'PHP ',''),',','')) / T0.DocTotal )* T0.WTsum
+				FROM OINV T0
+				--INNER JOIN INV5 T1 ON T0.DocNum=T1.AbsEntry
+				WHERE T0.DOCNUM=@DocNum
+
+	END
+
+IF @Type=14
+	BEGIN 
+			SELECT (CONVERT(float,REPLACE(REPLACE($[$20.24.0],'PHP ',''),',','')) / T0.DocTotal )* T0.WTSUM--T1.WTAMNT
+				FROM ORIN T0
+				--INNER JOIN RIN5 T1 ON T0.DocNum=T1.AbsEntry
+				WHERE T0.DOCNUM=@DocNum
+
+	END
+
+IF @Type=30 AND (SELECT COUNT(JDT1.ShortName) FROM JDT1 WHERE JDT1.TransId = @DocNum AND JDT1.ShortName = @WTAX_ACCOUNT) = 0
+	BEGIN
+
+		   SELECT CASE WHEN T1.Debit >0 
+					THEN (CONVERT(float,REPLACE(REPLACE($[$20.24.0],'PHP ',''),',',''))  / T1.SYSDeb )* T0.WTsum
+					
+									
+					ELSE (CONVERT(float,REPLACE(REPLACE($[$20.24.0],'PHP ',''),',',''))  / T1.SYSCred )* T0.WTsum
+				  END
+				FROM OJDT T0
+				INNER JOIN JDT1 T1 ON T0.Number=T1.TransId
+				WHERE T0.Number=@DocNum
+				AND T1.ShortName=@CARDCODE 
+
+	END
+ELSE
+
+BEGIN
+		SELECT CASE WHEN T1.DEBIT <> 0 THEN
+						SUM(T1.Debit)
+
+					WHEN T1.CREDIT <> 0 THEN
+						SUM(T1.Credit * -1)
+						END
+				FROM OJDT T0
+				INNER JOIN JDT1 T1 ON T0.Number=T1.TransId
+				WHERE T0.Number=@DocNum
+				AND T1.ShortName='CA060-1000-0000'
+				GROUP BY T1.DEBIT, T1.CREDIT
+
+END
+
+
+IF @Type=203
+	BEGIN 
+	IF $[$20.24.0]=$[$20.7.0]
+			SELECT (wtsum 
+				 -ISNULL((SELECT WTAmnt FROM RIN1 T0 INNER JOIN RIN5 T1 ON T0.DocEntry=T1.AbsEntry JOIN ORIN T2 ON T2.DOCNUM = T0.DOCENTRY WHERE T0.BaseEntry=@DocNum AND T2.CANCELED = 'N'),0))
+				-ISNULL((SELECT ((PaidSum/DocTotal)*BaseAmnt) *(SUM(RATE)/100) FROM ODPI T0 INNER JOIN DPI5 T1 ON T0.DocNum=T1.AbsEntry	
+				 WHERE DocNum= @DocNum AND T0.CANCELED = 'N' 
+				 GROUP BY PaidSum,DocTotal,BaseAmnt),0)
+				 FROM ODPI WHERE DocNum=@DocNum
+
+	ELSE
+			SELECT (CONVERT(float,REPLACE(REPLACE($[$20.24.0],'PHP ',''),',','')) / T0.DocTotal )* T0.WTSUM --T1.WTAMNT
+				FROM ODPI T0
+				--=INNER JOIN DPI5 T1 ON T0.DocNum=T1.AbsEntry
+				WHERE T0.DOCNUM=@DocNum
+
+	END

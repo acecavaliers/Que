@@ -1,0 +1,320 @@
+SELECT
+		T0.LogInstanc,
+		T1.USERID,
+		T1.U_NAME,
+		T0.DOCNUM,
+		T0.ObjType,	 
+		T0.UpdateDate,
+		T0.Comments,
+		T0.DOCTOTAL,
+		CASE WHEN T0.OBJTYPE =13 THEN 'A/R INVOICE'
+			WHEN T0.OBJTYPE =14 THEN 'A/R CREDIT MEMO'
+			WHEN T0.OBJTYPE =15 THEN 'DELIVERY'
+			WHEN T0.OBJTYPE =17 THEN 'SALES ORDER'
+			WHEN T0.OBJTYPE =18 THEN 'A/P INVOICE'
+			WHEN T0.OBJTYPE =19 THEN 'A/P CREDIT MEMO'
+			WHEN T0.OBJTYPE =20 THEN 'Goods Receipt PO'
+			WHEN T0.OBJTYPE =21 THEN 'Goods Return'
+			WHEN T0.OBJTYPE =22 THEN 'Purchase Order'
+			WHEN T0.OBJTYPE =59 THEN 'Goods Receipt'
+			WHEN T0.OBJTYPE =60 THEN 'Goods Issue'
+			WHEN T0.OBJTYPE =67 THEN 'Inventory Transfer'
+			WHEN T0.OBJTYPE =203 THEN '	A/R Down Payment'
+			WHEN T0.OBJTYPE =204 THEN 'A/P Down Payment'
+			WHEN T0.OBJTYPE =234000032 THEN 'Goods Return Request (AP Side) Table  OPRR'
+			WHEN T0.OBJTYPE =540000006 THEN 'Purchase Quotation'
+			WHEN T0.OBJTYPE =1250000001 THEN 'Inventory Transfer Request'
+			WHEN T0.OBJTYPE =1470000113 THEN 'Purchase Request'
+		ELSE '-' END AS 'MODULE NAME'
+FROM 	ADOC T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--13 AR INV
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'A/R INVOICE' AS 'MODULE NAME'
+
+FROM OINV T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--14 AR CM
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'A/R CREDIT MEMO' AS 'MODULE NAME'
+
+FROM ORIN T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--15 DELIVERY
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'DELIVERY' AS 'MODULE NAME'
+
+FROM ODLN T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--17 SALES ORDR
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'SALES ORDER' AS 'MODULE NAME'
+
+FROM ORDR T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--18 AP INV
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'A/P INVOICE' AS 'MODULE NAME'
+
+FROM OPCH T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--19 AP CM
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'A/P CREDIT MEMO' AS 'MODULE NAME'
+
+FROM ORPC T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--20 GRPO
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'Goods Receipt PO' AS 'MODULE NAME'
+
+FROM OPDN T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--21 GOODS RETURN
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'Goods Return' AS 'MODULE NAME'
+
+FROM ORPD T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--22 PO
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'PURCHASE ORDER' AS 'MODULE NAME'
+
+FROM OPOR T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--59 GOODS RECEIPT
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'Goods Receipt' AS 'MODULE NAME'
+
+FROM OIGN T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--60 GOODS ISSUE
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'Goods Issue' AS 'MODULE NAME'
+
+FROM OIGE T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--67 INV TRANSFER
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'Inventory Transfer' AS 'MODULE NAME'
+
+FROM OWTR T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K
+
+UNION ALL
+--203 ARDPI
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'A/R DOWN PAYMENT INVOICE' AS 'MODULE NAME'
+
+FROM ODPI T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--204 APDPI
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'A/P DOWN PAYMENT INVOICE' AS 'MODULE NAME'
+
+FROM ODPO T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--1250000001 Inventory Transfer Request
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'Inventory Transfer Request' AS 'MODULE NAME'
+
+FROM OWTQ T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--1470000113 Purchase Request
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'Purchase Request' AS 'MODULE NAME'
+
+FROM OPRQ T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--234000032 Goods Return Request
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'Goods Return Request' AS 'MODULE NAME'
+
+FROM OPRR T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+UNION ALL
+--540000006 Purchase Quotation
+SELECT 
+	  T0.LogInstanc,
+	  T1.USERID,
+	  T1.U_NAME,
+	  T0.DOCNUM,
+	  T0.ObjType,	 
+	  T0.UpdateDate,
+	  T0.Comments,
+	  T0.DOCTOTAL,
+	  'Purchase Quotation' AS 'MODULE NAME'
+
+FROM OPQT T0
+INNER JOIN OUSR T1 ON T0.UserSign2=T1.INTERNAL_K 
+
+ORDER BY T0.ObjType,T0.DocNum

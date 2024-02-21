@@ -1,0 +1,507 @@
+
+DECLARE @DATEFROM AS DATE ='01-01-2021', @DATETO  AS DATE ='12-31-2021',
+@DEPARTMENT VARCHAR(100)='', @CATEGORY VARCHAR(100)='', @ITEMNAME VARCHAR(200)='', @STORE VARCHAR(10)=''
+
+SELECT D.*,
+CASE WHEN D.[DE-AP]<>0 
+THEN convert(varchar(20),OJDT.Number)
+WHEN TYPE='AR RESERVE' AND (SELECT COUNT(BASEENTRY) FROM DLN1 WHERE BaseEntry=D.Transaction# AND DLN1.ItemCode=D.[Item Code])=0
+THEN CONCAT('AR - ',D.Transaction# )
+ELSE convert(varchar(20),D.Number)
+END AS 'JE-COST',
+--CASE WHEN D.TYPE='DELIVERY'
+--	THEN (SELECT NUMBER FROM OJDT WHERE OJDT.BaseRef=D.DE AND OJDT.TransType =15) 
+--	WHEN D.Reference LIKE '%AP%'
+--	THEN (SELECT NUMBER FROM OJDT WHERE OJDT.BaseRef=D.[DE-AP] AND OJDT.TransType =18) 
+--	ELSE 
+--		CASE WHEN TYPE='AR RESERVE' AND (SELECT COUNT(BASEENTRY) FROM DLN1 WHERE BaseEntry=D.Transaction# AND DLN1.ItemCode=D.[Item Code])=0
+--			THEN D.Transaction#
+--			ELSE D.Number
+--			END
+--	 END AS Num,
+CASE WHEN D.TYPE='AR Credit Memo' 
+	THEN (D.COST*D.[Quantity Sold])*-1 
+	ELSE D.COST*D.[Quantity Sold] 
+END  AS 'Total Cost',
+
+CASE WHEN D.SWW='FREEBIES' AND D.[Total Sales]=0 
+	THEN 0 
+	ELSE 
+		CASE WHEN D.TYPE='AR Credit Memo' 
+		THEN D.[Total Sales]-((D.COST*D.[Quantity Sold])*-1)
+		ELSE D.[Total Sales]-(D.COST*D.[Quantity Sold]) 
+		END
+END AS 'Gross Profit',
+
+CASE WHEN D.SWW='FREEBIES' AND D.[Total Sales]=0 
+	THEN 0 
+	ELSE 
+		CASE WHEN D.TYPE='AR Credit Memo' 
+		THEN (((D.[Total Sales]-((D.COST*D.[Quantity Sold])*-1))/NULLIF(D.[Total Sales], 0))*100)*-1 
+		ELSE ((D.[Total Sales]-(D.COST*D.[Quantity Sold]))/NULLIF(D.[Total Sales], 0))*100 
+		END 
+END AS 'Profit Margin' 
+
+
+FROM(
+--STANDARD AR
+SELECT T2.ItmsGrpNam AS 'Department',T3.CANCELED,T1.SWW,'' AS 'DE-AP', '' AS 'TRANSTYPE',
+T3.BPLID AS 'BRANCH ID',
+'AR INVOICE' AS 'TYPE',
+T1.U_Category AS 'Category',
+T0.DocEntry AS 'Transaction#',T6.Number,
+T3.DocDate AS 'Posting Date',
+t3.U_DocSeries AS 'Invoice No.',
+'' AS 'Reference',
+'' AS 'ReferenceDate',
+T3.CardName AS 'Customer',
+T4.CardFName AS 'Foreign Name',
+T3.Comments AS 'Comments',
+T0.ocrcode AS 'Whse',
+T0.ItemCode AS 'Item Code',
+T0.unitMsr AS 'unit',
+T0.Dscription AS 'Description',
+T0.Quantity AS 'Quantity Sold',
+T0.U_GPBD AS 'Price Before Discount',
+T0.PriceAfVAT AS 'Price After Discount',
+T0.INMPrice AS 'Price After Discount(VAT-Ex)',
+T0.StockValue/T0.Quantity AS 'COST',
+
+T0.INMPrice * T0.Quantity AS 'Total Sales'
+
+
+FROM INV1 T0
+
+INNER JOIN OITM T1 ON T0.ItemCode = T1.ItemCode
+INNER JOIN OITB T2 ON T1.ItmsGrpCod = T2.ItmsGrpCod
+INNER JOIN OINV T3 ON T0.DocEntry = T3.DocNum
+INNER JOIN OCRD T4 ON T3.CardCode = T4.CardCode 
+INNER JOIN OJDT T6 ON T0.DocEntry=T6.BaseRef AND T6.TransType =13
+
+
+WHERE T3.DocType = 'I' 
+AND T1.ItemType <> 'F'
+AND T3.TaxDate BETWEEN @DATEFROM AND  @DATETO
+AND T3.CANCELED='N'
+AND T3.isIns='N'
+AND T3.U_BO_DRS ='N' --AND T3.U_BO_DSDD ='N' AND T3.U_BO_DSDV ='N' AND T3.U_BO_DSPD ='N'
+
+UNION ALL --AR RESERRVE
+SELECT T2.ItmsGrpNam AS 'Department',T3.CANCELED,T1.SWW,'' AS 'DE-AP','' AS 'TRANSTYPE',
+T3.BPLID AS 'BRANCH ID',
+'AR RESERVE' AS 'TYPE',
+T1.U_Category AS 'Category',
+T0.DocEntry AS 'Transaction#',T6.Number,
+T3.DocDate AS 'Posting Date',
+t3.U_DocSeries AS 'Invoice No.',
+'' AS 'Reference',
+'' AS 'ReferenceDate',
+T3.CardName AS 'Customer',
+T4.CardFName AS 'Foreign Name',
+T3.Comments AS 'Comments',
+T0.ocrcode AS 'Whse',
+T0.ItemCode AS 'Item Code',
+T0.unitMsr AS 'unit',
+T0.Dscription AS 'Description',
+T0.Quantity-ISNULL(T7.QTY,0) AS 'Quantity Sold',
+T0.U_GPBD AS 'Price Before Discount',
+T0.PriceAfVAT AS 'Price After Discount',
+T0.INMPrice AS 'Price After Discount(VAT-Ex)',
+(SELECT AvgPrice FROM OITW WHERE ItemCode= T0.ItemCode AND WhsCode=T0.WhsCode) AS 'COST',
+
+T0.INMPrice * (T0.Quantity-ISNULL(T7.QTY,0)) AS 'Total Sales'
+
+
+FROM INV1 T0
+
+INNER JOIN OITM T1 ON T0.ItemCode = T1.ItemCode
+INNER JOIN OITB T2 ON T1.ItmsGrpCod = T2.ItmsGrpCod
+INNER JOIN OINV T3 ON T0.DocEntry = T3.DocNum
+INNER JOIN OCRD T4 ON T3.CardCode = T4.CardCode 
+INNER JOIN OJDT T6 ON T0.DocEntry=T6.BaseRef AND T6.TransType =13
+LEFT JOIN (SELECT SUM(Quantity)AS QTY,A0.BaseEntry,ITEMCODE FROM DLN1 A0 
+			INNER JOIN ODLN A1 ON A0.DocEntry=A1.DocNum 
+			WHERE CANCELED='N'
+			GROUP BY  A0.BaseEntry ,ItemCode) AS T7 ON T0.DocEntry=T7.BaseEntry
+			AND T7.ItemCode=T0.ItemCode
+
+WHERE T3.DocType = 'I' 
+AND T1.ItemType <> 'F'
+AND T3.TaxDate BETWEEN @DATEFROM AND  @DATETO
+AND T3.CANCELED='N'
+AND T3.isIns='Y'
+AND T3.U_BO_DRS ='N' --AND T3.U_BO_DSDD ='N' AND T3.U_BO_DSDV ='N' AND T3.U_BO_DSPD ='N'
+AND T0.Quantity-ISNULL(T7.QTY,0)>0
+
+UNION ALL --DELIVERIES
+
+
+SELECT 
+T2.ItmsGrpNam AS 'Department',T3.CANCELED,T1.SWW,T0.DocEntry AS 'DE-AP', 15 AS 'TRANSTYPE',
+T3.BPLID AS 'BRANCH ID',
+'DELIVERY' AS 'TYPE',
+T1.U_Category AS 'Category',
+T0.BaseEntry AS 'Transaction#',T6.Number,
+
+T7.TaxDate AS 'Posting Date',
+T7.U_DocSeries AS 'Invoice No.',
+CONCAT('DN ',T0.DocEntry) AS 'Reference',
+CONVERT(VARCHAR(20),T3.TAXDATE,101) AS 'ReferenceDate',
+T7.CardName AS 'Customer',
+T4.CardFName AS 'Foreign Name',
+T7.Comments AS 'Comments',
+T0.ocrcode AS 'Whse',
+T0.ItemCode AS 'Item Code',
+T0.unitMsr AS 'unit',
+T0.Dscription AS 'Description',
+T0.Quantity AS 'Quantity Sold',
+T0.U_GPBD AS 'Price Before Discount',
+T0.PriceAfVAT AS 'Price After Discount',
+T0.INMPrice AS 'Price After Discount(VAT-Ex)',
+T0.StockValue/T0.Quantity AS 'COST',
+T0.INMPrice * T0.Quantity AS 'Total Sales'
+
+
+FROM DLN1 T0
+
+INNER JOIN OITM T1 ON T0.ItemCode = T1.ItemCode AND T1.ItemType<>'F'
+INNER JOIN OITB T2 ON T1.ItmsGrpCod = T2.ItmsGrpCod
+INNER JOIN ODLN T3 ON T0.DocEntry = T3.DocNum
+INNER JOIN OCRD T4 ON T3.CardCode = T4.CardCode
+INNER JOIN OJDT T6 ON T0.BaseEntry=T6.BaseRef AND T6.TransType =13 
+LEFT JOIN OINV T7 ON T0.BaseEntry=T7.DocNum
+
+
+WHERE T3.DocType = 'I' 
+AND T1.ItemType <> 'F'
+AND T7.TaxDate BETWEEN '01-01-2021' AND  '12-31-2021'
+AND T3.CANCELED='N'
+--AND T3.isIns='Y'
+
+UNION ALL --DROPSHIP
+
+SELECT T2.ItmsGrpNam AS 'Department',T3.CANCELED,T1.SWW,
+CASE WHEN T7.RTYPE='AP' 
+THEN T7.DocEntry
+WHEN T9.RTYPE='AP' THEN T9.DOCENTRY
+WHEN T10.RTYPE='AP' THEN T10.DocEntry
+WHEN T11.DocEntry IS NOT NULL THEN T11.DocEntry
+END AS 'DE-AP',
+CASE WHEN ISNULL(ISNULL(T7.INMPrice,ISNULL(T9.INMPrice,T10.INMPrice)),T11.INMPrice) IS NOT NULL THEN 18 ELSE 0 END AS 'TRANSTYPE',
+T3.BPLID AS 'BRANCH ID',
+CASE WHEN T3.isIns ='Y' THEN 'AR RESERVE' ELSE 'AR INVOICE' END AS 'TYPE',
+T1.U_Category AS 'Category',
+T0.DocEntry AS 'Transaction#',T8.Number,
+T3.DocDate AS 'Posting Date',
+t3.U_DocSeries AS 'Invoice No.',
+CASE WHEN  T7.DocEntry IS NOT NULL AND T7.RTYPE ='AP'
+THEN CONCAT('AP ',T7.DocEntry)
+WHEN T9.RTYPE='AP' AND T9.RefDocNum IS NOT NULL
+THEN CONCAT('AP ',T9.REFDOCNUM)
+WHEN T11.DocEntry IS NOT NULL 
+THEN CONCAT('AP ',T11.DocEntry)
+WHEN T10.DocEntry IS NOT NULL AND T10.RTYPE='AP'
+THEN CONCAT('AP ',T10.DocEntry)
+ELSE ''
+END AS 'Reference',
+CASE WHEN T7.RTYPE ='AP' AND T7.TAXDATE IS NOT NULL
+THEN CONVERT(VARCHAR(20),T7.TAXDATE,101)
+WHEN T9.RTYPE='AP' AND T9.ISSUEDATE IS NOT NULL
+THEN CONVERT(VARCHAR(20),T9.ISSUEDATE,101)
+WHEN T11.TaxDate IS NOT NULL 
+THEN CONVERT(VARCHAR(20),T11.TAXDATE,101)
+WHEN T10.IssueDate IS NOT NULL AND T10.RTYPE='AP'
+THEN CONVERT(VARCHAR(20),T10.IssueDate,101)
+ELSE ''
+END AS 'ReferenceDate',
+T3.CardName AS 'Customer',
+T4.CardFName AS 'Foreign Name',
+T3.Comments AS 'Comments',
+T0.ocrcode AS 'Whse',
+T0.ItemCode AS 'Item Code',
+T0.unitMsr AS 'unit',
+T0.Dscription AS 'Description',
+CASE WHEN 
+(SELECT COUNT(Quantity)FROM POR1 WHERE DocEntry=T7.DocEntry AND ItemCode=T7.ItemCode AND ObjType=T7.ObjType 
+AND DOCENTRY NOT IN (SELECT BASEENTRY FROM PCH1 WHERE BaseType=22 AND ITEMCODE IS NOT NULL)) +
+(SELECT COUNT(Quantity)FROM PCH1 WHERE DocEntry=T7.DocEntry AND ItemCode=T7.ItemCode AND ObjType=T7.ObjType )+
+(SELECT COUNT(Quantity)FROM POR1 WHERE DocEntry=T9.DocEntry AND ItemCode=T9.ItemCode AND ObjType=T9.ObjType 
+AND DOCENTRY NOT IN (SELECT BASEENTRY FROM PCH1 WHERE BaseType=22 AND ITEMCODE IS NOT NULL)) +
+(SELECT COUNT(Quantity)FROM PCH1 WHERE DocEntry=T9.DocEntry AND ItemCode=T9.ItemCode AND ObjType=T9.ObjType ) >1
+OR (SELECT COUNT(DOCENTRY) FROM PCH1 WHERE BaseEntry=t7.PO_# and BaseType=22 )>1
+THEN T7.Quantity - ISNULL((SELECT DISTINCT A1.QUANTITY FROM IGE21 A0
+			INNER JOIN IGE1 A1 ON A0.DOCENTRY=A1.DOCENTRY
+			WHERE A0.REFOBJTYPE =13 AND REFDOCNUM=T0.DOCENTRY AND ITEMCODE=T0.ITEMCODE),0)
+ELSE T0.Quantity - ISNULL((SELECT DISTINCT A1.QUANTITY FROM IGE21 A0
+			INNER JOIN IGE1 A1 ON A0.DOCENTRY=A1.DOCENTRY
+			WHERE A0.REFOBJTYPE =13 AND REFDOCNUM=T0.DOCENTRY AND ITEMCODE=T0.ITEMCODE),0)
+
+END AS 'Quantity Sold', 
+T0.U_GPBD AS 'Price Before Discount',
+T0.PriceAfVAT AS 'Price After Discount',
+T0.INMPrice AS 'Price After Discount(VAT-Ex)',
+ISNULL(ISNULL(T7.INMPrice,ISNULL(T9.INMPrice,T10.INMPrice)),T11.INMPrice)	AS 'COST', --T11.INMPrice
+
+T0.INMPrice * CASE WHEN 
+(SELECT COUNT(Quantity)FROM POR1 WHERE DocEntry=T7.DocEntry AND ItemCode=T7.ItemCode AND ObjType=T7.ObjType 
+AND DOCENTRY NOT IN (SELECT BASEENTRY FROM PCH1 WHERE BaseType=22 AND ITEMCODE IS NOT NULL)) +
+(SELECT COUNT(Quantity)FROM PCH1 WHERE DocEntry=T7.DocEntry AND ItemCode=T7.ItemCode AND ObjType=T7.ObjType )+
+(SELECT COUNT(Quantity)FROM POR1 WHERE DocEntry=T9.DocEntry AND ItemCode=T9.ItemCode AND ObjType=T9.ObjType 
+AND DOCENTRY NOT IN (SELECT BASEENTRY FROM PCH1 WHERE BaseType=22 AND ITEMCODE IS NOT NULL)) +
+(SELECT COUNT(Quantity)FROM PCH1 WHERE DocEntry=T9.DocEntry AND ItemCode=T9.ItemCode AND ObjType=T9.ObjType ) >1
+OR (SELECT COUNT(DOCENTRY) FROM PCH1 WHERE BaseEntry=t7.PO_# and BaseType=22 )>1
+THEN T7.Quantity
+ELSE T0.Quantity - ISNULL((SELECT A1.QUANTITY FROM IGE21 A0
+			INNER JOIN IGE1 A1 ON A0.DOCENTRY=A1.DOCENTRY
+			WHERE A0.REFOBJTYPE =13 AND REFDOCNUM=T0.DOCENTRY AND ITEMCODE=T0.ITEMCODE),0)
+
+END AS 'Total Sales'
+
+FROM INV1 T0
+
+INNER JOIN OITM T1 ON T0.ItemCode = T1.ItemCode
+INNER JOIN OITB T2 ON T1.ItmsGrpCod = T2.ItmsGrpCod
+INNER JOIN OINV T3 ON T0.DocEntry = T3.DocNum
+INNER JOIN OCRD T4 ON T3.CardCode = T4.CardCode
+--from SO TO AP LINK NOT BROKEN
+LEFT JOIN (	SELECT DISTINCT A3.INMPrice,A3.DocEntry,A0.BaseEntry,A3.Quantity,A3.ItemCode,A3.WhsCode,A3.ObjType,A4.TAXDATE, 'AP'AS 'RTYPE',a0.DocEntry AS 'PO_#' FROM POR1 A0 
+			INNER JOIN PCH1 A3 ON A0.DocEntry=A3.BaseEntry
+			INNER JOIN OPCH A4 ON A3.DocEntry=A4.DocNum
+			WHERE A3.BaseType=22  AND A4.CANCELED='N'
+			AND A3.DocEntry NOT IN (SELECT DocEntry FROM PCH21 WHERE RefObjType=13)
+			AND A3.ITEMCODE IS NOT NULL
+			UNION ALL
+			SELECT DISTINCT A2.INMPrice,A2.DocEntry,A2.BaseEntry,A2.Quantity,A2.ItemCode,A2.WhsCode,A2.ObjType,A3.TAXDATE,'PO'AS 'RTYPE',A2.DocEntry AS 'PO_#' FROM POR1 A2
+			INNER JOIN OPOR A3 ON A2.DocEntry=A3.DocNum
+			WHERE A2.BaseType=540000006  AND A3.CANCELED='N'
+			AND A2.ITEMCODE IS NOT NULL
+			AND A2.DOCENTRY NOT IN (SELECT BASEENTRY FROM PCH1 WHERE BaseType=22 AND ITEMCODE IS NOT NULL)
+			UNION ALL
+			SELECT DISTINCT A3.INMPrice,A3.DocEntry,A0.BaseEntry,A3.Quantity,A3.ItemCode,A3.WhsCode,A3.ObjType,A4.TAXDATE, 'AP'AS 'RTYPE',a2.DocEntry AS 'PO_#' FROM PRQ1 A0 
+			INNER JOIN PQT1 A1 ON A0.DocEntry=A1.BaseEntry
+			INNER JOIN POR1 A2 ON A1.DocEntry=A2.BaseEntry
+			INNER JOIN PCH1 A3 ON A2.DocEntry=A3.BaseEntry
+			INNER JOIN OPCH A4 ON A3.DocEntry=A4.DocNum
+			WHERE A3.BaseType=22  AND A4.CANCELED='N'
+			AND A3.DocEntry NOT IN (SELECT DocEntry FROM PCH21 WHERE RefObjType=13)
+			AND A3.ITEMCODE IS NOT NULL
+			UNION ALL
+			SELECT DISTINCT A2.INMPrice,A2.DocEntry,A0.BaseEntry,A2.Quantity,A2.ItemCode,A2.WhsCode,A2.ObjType,A3.TAXDATE,'PO'AS 'RTYPE',a2.DocEntry AS 'PO_#' FROM PRQ1 A0 
+			INNER JOIN PQT1 A1 ON A0.DocEntry=A1.BaseEntry
+			INNER JOIN POR1 A2 ON A1.DocEntry=A2.BaseEntry
+			INNER JOIN OPOR A3 ON A2.DocEntry=A3.DocNum
+			WHERE A2.BaseType=540000006  AND A3.CANCELED='N'
+			AND A2.ITEMCODE IS NOT NULL
+			AND A2.DOCENTRY NOT IN (SELECT BASEENTRY FROM PCH1 WHERE BaseType=22 AND ITEMCODE IS NOT NULL)
+			)AS T7
+			ON T7.BaseEntry=T0.BaseEntry
+			AND T7.ItemCode=T0.ItemCode AND T7.WhsCode=T0.WhsCode
+
+--SO TO AP WITH BROKEN LINK REFERENCED THRU PURCHASE QOUTATION
+LEFT JOIN (SELECT DISTINCT A0.DOCENTRY,A4.RefObjType,A4.REFDOCNUM,A4.DOCENTRY AS 'REF_ENTRY',A4.ISSUEDATE,A0.INMPrice,A0.ItemCode,A0.ObjType,A0.Quantity,'AP'AS 'RTYPE' FROM PCH1 A0
+		INNER JOIN POR1 A1 ON A0.BaseEntry=A1.DocEntry
+		INNER JOIN PQT1 A2 ON A1.BaseEntry=A2.DocEntry
+		INNER JOIN PRQ1 A3 ON A2.BaseEntry=A3.DocEntry
+		INNER JOIN RDR21 A4 ON A3.DocEntry=A4.RefDocNum
+		INNER JOIN OPCH A5 ON A5.DOCNUM=A0.DOCENTRY
+		WHERE A4.RefObjType=1470000113 AND A5.CANCELED='N'
+		UNION ALL
+		SELECT DISTINCT A0.DOCENTRY,A3.RefObjType,A3.REFDOCNUM,A3.DOCENTRY AS 'REF_ENTRY',A3.ISSUEDATE,A0.INMPrice,A0.ItemCode,A0.ObjType,A0.Quantity,'PO'AS 'RTYPE' FROM POR1 A0
+		INNER JOIN PQT1 A1 ON A0.BaseEntry=A1.DocEntry
+		INNER JOIN PRQ1 A2 ON A1.BaseEntry=A2.DocEntry
+		INNER JOIN RDR21 A3 ON A2.DocEntry=A3.RefDocNum
+		INNER JOIN OPOR A4 ON A3.DOCENTRY=A4.DOCNUM
+		WHERE A3.RefObjType=1470000113 AND A4.CANCELED='N'
+		AND A0.DOCENTRY NOT IN (SELECT BASEENTRY FROM PCH1 WHERE BaseType=22 AND ITEMCODE IS NOT NULL)) 
+		AS T9
+		ON T0.BaseEntry=T9.REF_ENTRY AND T9.ItemCode=T0.ItemCode
+--SO TO AP WITH BROKEN LINK REFERENCED THRU PURCHASE ORDER
+LEFT JOIN (SELECT DISTINCT A0.DOCENTRY,A4.RefObjType,A4.REFDOCNUM,A4.DOCENTRY AS 'REF_ENTRY',A4.ISSUEDATE,A0.INMPrice,A0.ItemCode,A0.ObjType,A0.Quantity,'AP'AS 'RTYPE' FROM PCH1 A0
+		INNER JOIN POR1 A1 ON A0.BaseEntry=A1.DocEntry
+		INNER JOIN RDR21 A4 ON A1.DocEntry=A4.RefDocNum
+		INNER JOIN OPCH A5 ON A5.DOCNUM=A0.DOCENTRY
+		WHERE A4.RefObjType=22 AND A5.CANCELED='N'
+		UNION ALL
+		SELECT DISTINCT A0.DOCENTRY,A3.RefObjType,A3.REFDOCNUM,A3.DOCENTRY AS 'REF_ENTRY',A3.ISSUEDATE,A0.INMPrice,A0.ItemCode,A0.ObjType,A0.Quantity,'PO'AS 'RTYPE' FROM POR1 A0
+		INNER JOIN RDR21 A3 ON A0.DocEntry=A3.RefDocNum
+		INNER JOIN OPOR A4 ON A3.DOCENTRY=A4.DOCNUM
+		WHERE A3.RefObjType=22 AND A4.CANCELED='N'
+		AND A0.DOCENTRY NOT IN (SELECT BASEENTRY FROM PCH1 WHERE BaseType=22 AND ITEMCODE IS NOT NULL)) 
+		AS T10
+		ON T0.BaseEntry=T10.REF_ENTRY AND T10.ItemCode=T0.ItemCode
+--SO TO AP WITH BROKEN LINK REFERENCED THRU AP INV
+LEFT JOIN (SELECT DISTINCT A0.DOCENTRY,A4.RefObjType,A4.REFDOCNUM,A4.DOCENTRY AS 'REF_ENTRY',A5.TaxDate,A0.INMPrice,A0.ItemCode,A0.ObjType,A0.Quantity FROM PCH1 A0
+		INNER JOIN PCH21 A4 ON A0.DocEntry=A4.DocEntry
+		INNER JOIN OPCH A5 ON A5.DOCNUM=A0.DOCENTRY
+		WHERE A4.RefObjType=13 AND A5.CANCELED='N') AS T11
+		ON T0.DocEntry=T11.REFDOCNUM AND T0.ItemCode=T11.ItemCode
+
+INNER JOIN OJDT T8 ON T0.DocEntry=T8.BaseRef AND T8.TransType =13
+
+WHERE T3.DocType = 'I' 
+AND T1.ItemType <> 'F'
+AND T3.DocDate >= @DATEFROM AND T3.DocDate <= @DATETO
+AND T3.CANCELED='N'
+AND T3.ISINS='N'
+AND  T3.U_BO_DRS ='Y' --OR T3.U_BO_DSDD ='Y' OR T3.U_BO_DSDV ='Y' OR T3.U_BO_DSPD ='Y' 
+
+UNION ALL --GOODS ISSUE
+
+SELECT T2.ItmsGrpNam AS 'Department',T3.CANCELED,T1.SWW,'' AS 'DE-AP','' AS 'TRANSTYPE',
+T3.BPLID AS 'BRANCH ID',
+CASE WHEN T3.isIns ='Y' THEN 'AR RESERVE' ELSE 'AR INVOICE' END AS 'TYPE',
+T1.U_Category AS 'Category',
+T0.DocEntry AS 'Transaction#',T9.Number,
+T3.DocDate AS 'Posting Date',
+t3.U_DocSeries AS 'Invoice No.',
+CASE WHEN  T3.U_BO_DRS ='Y' --OR T3.U_BO_DSDD ='Y' OR T3.U_BO_DSDV ='Y' OR T3.U_BO_DSPD ='Y' 
+THEN CONCAT('GI ',T8.DocEntry)
+
+ELSE ''
+END AS 'Reference',
+CASE WHEN  T3.U_BO_DRS ='Y' --OR T3.U_BO_DSDD ='Y' OR T3.U_BO_DSDV ='Y' OR T3.U_BO_DSPD ='Y' 
+THEN CONVERT(VARCHAR(20),T8.IssueDate,101)
+ELSE ''
+END AS 'ReferenceDate',
+T3.CardName AS 'Customer',
+T4.CardFName AS 'Foreign Name',
+T3.Comments AS 'Comments',
+T0.ocrcode AS 'Whse',
+T0.ItemCode AS 'Item Code',
+T0.unitMsr AS 'unit',
+T0.Dscription AS 'Description',
+--T0.Quantity AS 'Quantity Sold',
+T8.Quantity 
+	AS 'Quantity Sold',
+--T0.Quantity-ISNULL(T5.QTY,0) AS 'Quantity Sold',
+T0.U_GPBD AS 'Price Before Discount',
+T0.PriceAfVAT AS 'Price After Discount',
+T0.INMPrice AS 'Price After Discount(VAT-Ex)',
+T8.PRICE AS 'COST',
+
+T0.INMPrice * T8.Quantity AS 'Total Sales'
+
+FROM INV1 T0
+
+INNER JOIN OITM T1 ON T0.ItemCode = T1.ItemCode
+INNER JOIN OITB T2 ON T1.ItmsGrpCod = T2.ItmsGrpCod
+INNER JOIN OINV T3 ON T0.DocEntry = T3.DocNum
+INNER JOIN OCRD T4 ON T3.CardCode = T4.CardCode
+LEFT JOIN (SELECT SUM(Quantity) AS 'QTY', A0.BaseEntry , ItemCode,WHSCODE 
+		FROM DLN1 A0 INNER JOIN ODLN A1 ON A0.DOCENTRY=A1.DOCNUM
+		WHERE CANCELED = 'N'
+		GROUP BY  A0.BaseEntry ,ItemCode,WHSCODE) AS T5  
+		ON T5.BaseEntry =T0.DocEntry AND T5.ItemCode=T0.ItemCode AND T5.WHSCODE=T0.WHSCODE  
+
+INNER JOIN (SELECT A1.DOCENTRY,REFDOCNUM, A1.QUANTITY,A1.LINETOTAL/A1.QUANTITY AS 'PRICE',A0.IssueDate FROM IGE21 A0
+		INNER JOIN IGE1 A1 ON A0.DOCENTRY=A1.DOCENTRY
+		WHERE A0.REFOBJTYPE =13) AS T8
+		ON T8.REFDOCNUM=T0.DOCENTRY 
+INNER JOIN OJDT T9 ON T8.DOCENTRY=T9.BaseRef AND T9.TransType =60
+
+WHERE T3.DocType = 'I' 
+AND T1.ItemType <> 'F'
+AND T3.DocDate >= @DATEFROM AND T3.DocDate <= @DATETO
+AND T3.CANCELED='N'
+AND  T3.U_BO_DRS ='Y' --OR T3.U_BO_DSDD ='Y' OR T3.U_BO_DSDV ='Y' OR T3.U_BO_DSPD ='Y' 
+
+UNION ALL  --AR CM
+
+SELECT T2.ItmsGrpNam AS 'Department',T3.CANCELED,T1.SWW,'' AS 'DE-AP','' AS 'TRANSTYPE',
+T3.BPLID AS 'BRANCH ID',
+'AR Credit Memo' AS 'TYPE',
+T1.U_Category AS 'Category',
+T0.DocEntry AS 'Transaction#',T6.Number,
+T3.DocDate AS 'Posting Date',
+T3.U_DocSeries AS 'Invoice No.',
+'' AS 'Reference',
+'' AS 'ReferenceDate',
+T3.CardName AS 'Customer',
+T4.CardFName AS 'Foreign Name',
+T3.Comments AS 'Comments',
+T0.ocrcode AS 'Whse',
+T0.ItemCode AS 'Item Code',
+T0.unitMsr AS 'unit',
+T0.Dscription AS 'Description',
+T0.Quantity * -1 AS 'Quantity Sold',
+T0.U_GPBD AS 'Price Before Discount',
+T0.PriceAfVAT * -1 AS 'Price After Discount',
+T0.INMPrice * -1 AS 'Price After Discount(VAT-Ex)',
+CASE WHEN   T3.U_BO_DRS ='Y' --OR T3.U_BO_DSDD ='Y' OR T3.U_BO_DSDV ='Y' OR T3.U_BO_DSPD ='Y' 
+THEN ISNULL(T5.INMPrice,ISNULL((SELECT DISTINCT A3.INMPrice 
+							FROM INV1 A0
+							INNER JOIN  PRQ1 A1 ON A0.BaseEntry=A1.BaseEntry
+							INNER JOIN PQT1 A2 ON A1.DocEntry=A2.BaseEntry
+							INNER JOIN POR1 A3 ON A2.DocEntry=A3.BaseEntry
+							WHERE A0.DOCENTRY=T0.BaseEntry
+							AND A3.BaseType=540000006 AND A3.ItemCode=T0.ItemCode AND A2.WhsCode=T0.WhsCode),
+							(SELECT A3.INMPrice FROM INV1 A0
+							INNER JOIN RDR21 A1 ON A0.BaseEntry=A1.DocEntry
+							INNER JOIN POR1 A2 ON A1.RefDocNum=A2.DOCENTRY
+							INNER JOIN PCH1 A3 ON A2.DocEntry=A3.BaseEntry
+							WHERE A0.DocEntry=T0.BASEENTRY AND A3.ItemCode=T0.ItemCode
+							UNION ALL 
+							SELECT A2.INMPrice FROM INV1 A0
+							INNER JOIN RDR21 A1 ON A0.BaseEntry=A1.DocEntry
+							INNER JOIN POR1 A2 ON A1.RefDocNum=A2.DOCENTRY
+							WHERE A0.DocEntry=T0.BASEENTRY AND A2.ItemCode=T0.ItemCode
+							AND A2.DocEntry NOT IN (SELECT BaseEntry FROM PCH1 WHERE BASETYPE=22))))
+WHEN (SELECT isIns FROM OINV WHERE DOCNUM=T0.BaseEntry)='Y'
+	THEN CASE WHEN T0.ITEMCODE IN ((SELECT ITEMCODE FROM DLN1 A0 INNER JOIN ODLN A1 ON A0.DOCENTRY=A1.DOCNUM WHERE A0.BaseEntry=T0.BaseEntry AND CANCELED='N'))
+			THEN (SELECT TOP 1 StockValue/Quantity AS 'PRICE' FROM DLN1 WHERE BaseEntry=T0.BaseEntry AND ItemCode=T0.ItemCode)
+			ELSE (SELECT AvgPrice FROM OITW WHERE ItemCode= T0.ItemCode AND WhsCode=T0.WhsCode)
+			END
+ELSE 
+			CASE WHEN T0.BASETYPE=203
+			THEN (SELECT DISTINCT A1.StockValue/A1.Quantity FROM DPI1 A0
+				INNER JOIN INV1 A1 ON A0.BaseEntry=A1.BaseEntry
+				WHERE A0.DocEntry=T0.BaseEntry AND A1.ItemCode=T0.ItemCode)
+			WHEN T0.BaseType=13
+			THEN (SELECT TOP 1 StockValue/Quantity FROM INV1 WHERE DocEntry=T0.BaseEntry AND ItemCode=T0.ItemCode AND ObjType=T0.BaseType)
+			END		
+			
+END *-1 AS 'Cost',
+(T0.INMPrice * T0.Quantity) * -1 AS 'Total Sales'
+
+
+from RIN1 T0
+
+INNER JOIN OITM T1 ON T0.ItemCode = T1.ItemCode 
+INNER JOIN OITB T2 ON T1.ItmsGrpCod = T2.ItmsGrpCod
+INNER JOIN ORIN T3 ON T0.DocEntry = T3.DocNum
+INNER JOIN OCRD T4 ON T3.CardCode = T4.CardCode
+LEFT JOIN (SELECT DISTINCT A0.DocEntry,A5.INMPrice,A5.ItemCode,A5.WhsCode
+		FROM RIN1 A0
+		INNER JOIN INV1 A1 ON A0.BaseEntry=A1.DocEntry
+		INNER JOIN PRQ1 A2 ON A1.BaseEntry=A2.BaseEntry
+		INNER JOIN PQT1 A3 ON A2.DocEntry=A3.BaseEntry
+		INNER JOIN POR1 A4 ON A3.DocEntry=A4.BaseEntry
+		INNER JOIN PCH1 A5 ON A4.DocEntry=A5.BaseEntry
+		WHERE A0.BaseType=13 AND A5.BaseType=22
+		UNION ALL
+		SELECT DISTINCT A0.DocEntry,A5.INMPrice,A5.ItemCode,A5.WhsCode
+		FROM RIN1 A0
+		INNER JOIN DPI1 A1 ON A0.BaseEntry=A1.DocEntry
+		INNER JOIN PRQ1 A2 ON A1.BaseEntry=A2.BaseEntry
+		INNER JOIN PQT1 A3 ON A2.DocEntry=A3.BaseEntry
+		INNER JOIN POR1 A4 ON A3.DocEntry=A4.BaseEntry
+		INNER JOIN PCH1 A5 ON A4.DocEntry=A5.BaseEntry
+		WHERE A0.BaseType=203 AND A5.BaseType=22
+		) AS T5
+		ON T5.DocEntry =T0.DocEntry		
+		AND T5.ItemCode=T0.ItemCode AND T5.WhsCode=T0.WhsCode
+INNER JOIN OJDT T6 ON T0.DocEntry=T6.BaseRef AND T6.TransType =14
+
+
+WHERE T3.DocType = 'I' 
+AND T1.ItemType <> 'F'
+AND T3.DocDate >= @DATEFROM AND T3.DocDate <= @DATETO
+AND T3.CANCELED='N'
+AND T0.BaseType<>203
+) D
+LEFT JOIN OJDT ON OJDT.BaseRef=D.[DE-AP] AND OJDT.TransType = D.TRANSTYPE
+
+ORDER BY 'Transaction#' ASC
+
+
+

@@ -1,0 +1,82 @@
+DECLARE @DocNum int, @Type as int, @CARDCODE AS VARCHAR(20), @WTAX_ACCOUNT AS VARCHAR(50)
+
+SET @Type=$[$20.45.0]
+SET @DocNum=$[$20.1.0]
+SET @CARDCODE =$[$5.0.0]  
+SET @WTAX_ACCOUNT = 'CL020-1800-0000' 
+
+IF @Type=204
+	BEGIN 
+		IF $[$20.24.0]=$[$20.7.0]
+				SELECT (wtsum
+				 -ISNULL((SELECT SUM(WTAmnt) FROM RPC1 T0 INNER JOIN RPC5 T1 ON T0.DocEntry=T1.AbsEntry JOIN ORPC T2 ON T2.DOCNUM = T0.DOCENTRY WHERE T0.BaseEntry=@DocNum AND T2.CANCELED = 'N'),0))
+				 -ISNULL((SELECT SUM(U_WTaxPay) FROM VPM2 T0 INNER JOIN OVPM T1 ON T0.DocNum=T1.DocNum WHERE T0.DocEntry= @DocNum and CANCELED='N' AND T0.InvType=204),0)
+				FROM ODPO WHERE DocNum=@DocNum
+
+		ELSE
+				SELECT (CONVERT(float,REPLACE(REPLACE($[$20.24.0],'PHP ',''),',','')) / T0.DocTotal )* T0.WTsum--T1.WTAMNT
+				FROM ODPO T0
+				--INNER JOIN DPO5 T1 ON T0.DocNum=T1.AbsEntry
+				WHERE T0.DOCNUM=@DocNum
+
+	END
+IF @Type=18
+    BEGIN
+	IF $[$20.24.0]=$[$20.7.0] 
+
+				SELECT (wtsum 
+				 - ISNULL((SELECT SUM(WTAmnt) FROM RPC1 T0 INNER JOIN RPC5 T1 ON T0.DocEntry=T1.AbsEntry JOIN ORPC T2 ON T2.DOCNUM = T0.DOCENTRY WHERE T0.BaseEntry=@DocNum AND T2.CANCELED = 'N'),0))
+				 - ISNULL((SELECT SUM(U_WTaxPay) FROM VPM2 JOIN OVPM  ON VPM2.DOCNUM = OVPM.DOCNUM WHERE OVPM.CANCELED = 'N' AND VPM2.DocEntry= @DocNum AND InvType=18),0)
+				FROM OPCH WHERE DocNum=@DocNum
+		
+		ELSE
+
+				SELECT (CONVERT(FLOAT,REPLACE(REPLACE($[$20.24.0],'PHP ',''),',','')) / T0.DocTotal )* T0.WTsum
+				FROM OPCH T0
+				--INNER JOIN PCH5 T1 ON T0.DocNum=T1.AbsEntry
+				WHERE T0.DOCNUM=@DocNum
+END
+
+IF @Type=19
+    BEGIN
+        SELECT (CONVERT(float,REPLACE(REPLACE($[$20.24.0],'PHP ',''),',','')) / T0.DocTotal )* T0.WTsum--T1.WTAMNT
+		FROM ORPC T0
+		--INNER JOIN RPC5 T1 ON T0.DocNum=T1.AbsEntry
+		WHERE T0.DOCNUM=@DocNum          
+END
+
+IF @Type=14
+	BEGIN 
+			SELECT (CONVERT(float,REPLACE(REPLACE($[$20.24.0],'PHP ',''),',','')) / T0.DocTotal )* T0.WTSUM--T1.WTAMNT
+				FROM ORIN T0
+				--INNER JOIN RIN5 T1 ON T0.DocNum=T1.AbsEntry
+				WHERE T0.DOCNUM=@DocNum
+
+	END
+
+IF @Type=30 --AND (SELECT COUNT(JDT1.ShortName) FROM JDT1 WHERE JDT1.TransId = @DocNum AND JDT1.ShortName = @WTAX_ACCOUNT) = 0
+	BEGIN 
+	 if (SELECT COUNT(JDT1.ShortName) FROM JDT1 WHERE JDT1.TransId = @DocNum AND JDT1.ShortName = @WTAX_ACCOUNT) = 0
+
+		   SELECT CASE WHEN T1.Debit >0 
+				THEN (CONVERT(float,REPLACE(REPLACE($[$20.24.0],'PHP ',''),',',''))  / T1.SYSDeb )* T0.WTsum
+				ELSE (CONVERT(float,REPLACE(REPLACE($[$20.24.0],'PHP ',''),',',''))  / T1.SYSCred )* T0.WTsum
+				END
+				FROM OJDT T0
+				INNER JOIN JDT1 T1 ON T0.Number=T1.TransId
+				WHERE T0.Number=@DocNum
+				AND T1.ShortName=@CARDCODE 
+
+     ELSE
+		    SELECT CASE   WHEN T1.DEBIT <> 0 THEN SUM(-1*T1.Debit)
+			            WHEN T1.CREDIT <> 0 THEN SUM(T1.Credit) 
+                                                   END
+				FROM OJDT T0
+				INNER JOIN JDT1 T1 ON T0.Number=T1.TransId
+				WHERE T0.Number=@DocNum
+				AND T1.ShortName='CL020-1800-0000'
+				GROUP BY T1.DEBIT, T1.CREDIT
+END
+    
+   
+

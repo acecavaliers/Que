@@ -1,0 +1,387 @@
+-- select wtsum+doctotal,U_WTax,doctotal,* from OINV where docnum=409
+-- select U_WTax,* from rct2 where docnum=396
+
+
+DECLARE @QTR INT= 1 ,@GRP INT =0, @ATC varchar= '' , @INVnum  INT = 0, @INV Int =0, @DOCNUM INT =395
+--DECLARE @QTR INT={?Pm-?quarter} ,@GRP INT ={?Pm-?Group}, @ATC varchar= '{?ATC}' , @INVnum  INT = {?Pm-?ApDocnum}, @INV Int ={?InvType}, @DOCNUM INT ={?Pm-?Docnum}
+IF (@INVnum  = 0) AND (@INV =0)
+
+SELECT *,
+ISNULL(T.WTAmnt,0)+ ISNULL((SELECT CASE WHEN DEBIT <> 0 THEN Debit *-1 ELSE  Credit END FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T.DocEntry AND U_BASEDOCTYPE=T.InvType
+    ),0)
+AS 'wtax',
+CASE 
+    WHEN ROW_NUMBER() OVER (ORDER BY (SELECT 1))>@GRP THEN ROW_NUMBER() OVER (ORDER BY (SELECT 1))-@GRP 
+    ELSE ROW_NUMBER() OVER (ORDER BY (SELECT 1)) 
+    END AS 'RNUM'
+FROM(
+--ARINV
+SELECT
+CASE WHEN U_ALIAS_VENDOR IS NULL THEN CardName ELSE U_ALIAS_VENDOR END AS N1,CardName,
+T0.VatPaid,ISNULL(T3.U_wTaxComCode,T0.U_wTaxComCode) AS 'U_wTaxComCode', T3.DOCENTRY, T3.INVTYPE,T3.DocNum,Rate,
+T0.TAXDATE, 
+
+CASE 
+    WHEN (SELECT COUNT(RATE) FROM INV5 WHERE AbsEntry=T3.DocEntry)>1 
+    THEN (SELECT MAX(TaxbleAmnt) FROM INV5 WHERE AbsEntry=T3.DocEntry)
+    ELSE ISNULL(TaxbleAmnt,T0.DocTotal-T0.VatSum)
+END AS 'TaxbleAmnt',
+CASE 
+    WHEN (SELECT COUNT(RATE) FROM INV5 WHERE AbsEntry=T3.DocEntry)>1 
+    THEN ((T3.SUMAPPLIED/T0.DOCTOTAL)*(SELECT MAX(TaxbleAmnt) FROM INV5 WHERE AbsEntry=T3.DocEntry)) *(T1.RATE/100)
+    ELSE T3.U_WtaxPay
+END  AS 'WTAmnt',
+
+T0.WTSum, T0.U_WTax , 
+
+CASE WHEN T3.U_WtaxPay=0 AND T3.U_GrossAmt=0 AND (SELECT U_ATCcode FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType)IS NOT NULL 
+THEN T0.doctotal
+ELSE T3.U_GROSSAMT- CASE WHEN T3.U_GROSSAMT- T3.U_WTax=T3.U_GROSSAMT 
+         THEN ISNULL((SELECT CASE WHEN DEBIT <> 0 THEN Debit *-1 ELSE  Credit END FROM JDT1 A0 
+         WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType  ),0)
+         ELSE T3.U_WTax     
+ END 
+ END AS  
+ 'DOCTOTAL'  ,
+ T3.SUMAPPLIED,BASEAMNT,u_wtaxpay,
+ 
+ T3.U_GROSSAMT,
+
+ISNULL((SELECT TI.U_ATC FROM OWHT TI
+WHERE T1.AbsEntry=T0.DocNum AND TI.WTCode = T1.WTCode ),
+ISNULL((SELECT A0.U_ATCCODE FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType  
+),'')) AS 'ATC',
+
+ISNULL((SELECT TOP 1 CONCAT(TI.U_ATCDesc,TI.U_EXTDESC ) FROM OWHT TI 
+ WHERE  T1.AbsEntry =T0.DocNum AND TI.WTCode = T1.WTCode),
+ISNULL((SELECT A0.U_ATCNAME FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType 
+ ),'')) AS 'ATC Description',
+
+CASE
+WHEN
+month(t0.taxdate) = '1' OR month(t0.taxdate)= '2' OR month(t0.taxdate)= '3' THEN '1'
+WHEN
+month(t0.taxdate) = '4' OR month(t0.taxdate)= '5' OR month(t0.taxdate)= '6' THEN '2'
+WHEN
+month(t0.taxdate) = '7' OR month(t0.taxdate)= '8' OR month(t0.taxdate)= '9' THEN '3'
+WHEN
+month(t0.taxdate) = '10' OR month(t0.taxdate)= '11' OR month(t0.taxdate)= '12' THEN '4'
+ELSE 'N/A'
+END AS 'QTR',
+
+(SELECT COUNT(*) from RCT2 T6 WHERE T6.DOCNUM = @DocNum) AS 'ROWS'
+
+FROM OINV T0 
+LEFT JOIN INV5 T1 ON T1.AbsEntry=T0.DocNum
+INNER JOIN RCT2 T3 ON T0.DOCNUM = T3.Docentry AND T3.InvType=13
+
+WHERE T3.DocNum = @DOCNUM
+AND T0.CANCELED='N'
+
+UNION ALL 
+--ARDPI 
+SELECT
+CASE WHEN U_ALIAS_VENDOR IS NULL THEN CardName ELSE U_ALIAS_VENDOR END AS N1,CardName,
+T0.VatPaid,ISNULL(T3.U_wTaxComCode,T0.U_wTaxComCode) AS 'U_wTaxComCode', T3.DOCENTRY, T3.INVTYPE,T3.DocNum,Rate,
+T0.TAXDATE, 
+
+CASE 
+    WHEN (SELECT COUNT(RATE) FROM DPI5 WHERE AbsEntry=T3.DocEntry)>1 
+    THEN (SELECT MAX(TaxbleAmnt) FROM DPI5 WHERE AbsEntry=T3.DocEntry)
+    ELSE ISNULL(TaxbleAmnt,T0.DocTotal-T0.VatSum)
+END AS 'TaxbleAmnt',
+CASE 
+    WHEN (SELECT COUNT(RATE) FROM DPI5 WHERE AbsEntry=T3.DocEntry)>1 
+    THEN ((T3.SUMAPPLIED/T0.DOCTOTAL)*(SELECT MAX(TaxbleAmnt) FROM DPI5 WHERE AbsEntry=T3.DocEntry)) *(T1.RATE/100)
+    ELSE T3.U_WtaxPay
+END  AS 'WTAmnt',
+
+T0.WTSum, T0.U_WTax,
+
+CASE WHEN T3.U_WtaxPay=0 AND T3.U_GrossAmt=0 AND (SELECT U_ATCcode FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType)IS NOT NULL 
+THEN T0.doctotal
+ELSE T3.U_GROSSAMT- CASE WHEN T3.U_GROSSAMT- T3.U_WTax=T3.U_GROSSAMT 
+         THEN ISNULL((SELECT CASE WHEN DEBIT <> 0 THEN Debit *-1 ELSE  Credit END FROM JDT1 A0 
+         WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType  ),0)
+         ELSE T3.U_WTax     
+ END 
+ END AS  
+ 'DOCTOTAL'  ,
+-- T3.U_GROSSAMT- 
+-- CASE WHEN T3.U_GROSSAMT- T3.U_WTax=T3.U_GROSSAMT 
+--     THEN ISNULL((SELECT A1.U_WtaxPay FROM JDT1 A0 INNER JOIN RCT2 A1 ON A0.TransId=A1.DocEntry 
+--     WHERE A0.U_ATCcode IS NOT NULL  AND A1.InvType=30  AND A1.DocNum=T3.DocNum  AND A0.Ref1=T3.DocEntry 
+--     ),0)
+--     ELSE T3.U_WTax     
+--  END AS  'DOCTOTAL'  ,
+T3.SUMAPPLIED,BASEAMNT,u_wtaxpay,T3.U_GROSSAMT,
+
+ISNULL((SELECT TI.U_ATC FROM OWHT TI
+WHERE T1.AbsEntry=T0.DocNum AND TI.WTCode = T1.WTCode ),
+ISNULL((SELECT A0.U_ATCCODE FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType 
+),'')) AS 'ATC',
+
+ISNULL((SELECT TOP 1 CONCAT(TI.U_ATCDesc,TI.U_EXTDESC ) FROM OWHT TI 
+ WHERE  T1.AbsEntry =T0.DocNum AND TI.WTCode = T1.WTCode),
+ISNULL((SELECT A0.U_ATCNAME FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType
+ ),'')) AS 'ATC Description',
+
+CASE
+WHEN
+month(t0.taxdate) = '1' OR month(t0.taxdate)= '2' OR month(t0.taxdate)= '3' THEN '1'
+WHEN
+month(t0.taxdate) = '4' OR month(t0.taxdate)= '5' OR month(t0.taxdate)= '6' THEN '2'
+WHEN
+month(t0.taxdate) = '7' OR month(t0.taxdate)= '8' OR month(t0.taxdate)= '9' THEN '3'
+WHEN
+month(t0.taxdate) = '10' OR month(t0.taxdate)= '11' OR month(t0.taxdate)= '12' THEN '4'
+ELSE 'N/A'
+END AS 'QTR',
+
+(SELECT COUNT(*) from RCT2 T6 WHERE T6.DOCNUM = @DocNum) AS 'ROWS'
+
+FROM ODPI T0 
+LEFT JOIN DPI5 T1 ON T1.AbsEntry=T0.DocNum
+INNER JOIN RCT2 T3 ON T0.DOCNUM = T3.Docentry  AND T3.InvType=203
+
+WHERE T3.DocNum = @DOCNUM
+AND T0.CANCELED='N'
+
+UNION ALL
+--CM
+SELECT
+CASE WHEN U_ALIAS_VENDOR IS NULL THEN CardName ELSE U_ALIAS_VENDOR END AS N1,CardName,
+T0.VatPaid,ISNULL(T3.U_wTaxComCode,T0.U_wTaxComCode) AS 'U_wTaxComCode', T3.DOCENTRY, T3.INVTYPE,T3.DocNum,Rate,
+T0.TAXDATE, 
+
+CASE 
+    WHEN (SELECT COUNT(RATE) FROM RIN5 WHERE AbsEntry=T3.DocEntry)>1 
+    THEN (SELECT MAX(TaxbleAmnt) FROM RIN5 WHERE AbsEntry=T3.DocEntry)
+    ELSE ISNULL(TaxbleAmnt,T0.DocTotal-T0.VatSum)
+END AS 'TaxbleAmnt',
+CASE 
+    WHEN (SELECT COUNT(RATE) FROM RIN5 WHERE AbsEntry=T3.DocEntry)>1 
+    THEN ((T3.SUMAPPLIED/T0.DOCTOTAL)*(SELECT MAX(TaxbleAmnt) FROM RIN5 WHERE AbsEntry=T3.DocEntry)) *(T1.RATE/100)
+    ELSE T3.U_WtaxPay
+END  AS 'WTAmnt',
+
+T0.WTSum, T0.U_WTax ,
+CASE WHEN T3.U_WtaxPay=0 AND T3.U_GrossAmt=0 AND (SELECT U_ATCcode FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType)IS NOT NULL 
+THEN T0.doctotal
+ELSE T3.U_GROSSAMT- CASE WHEN T3.U_GROSSAMT- T3.U_WTax=T3.U_GROSSAMT 
+         THEN ISNULL((SELECT CASE WHEN DEBIT <> 0 THEN Debit *-1 ELSE  Credit END FROM JDT1 A0 
+         WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType  ),0)
+         ELSE T3.U_WTax     
+ END 
+ END AS  
+ 'DOCTOTAL'  ,
+-- T3.U_GROSSAMT- 
+-- CASE WHEN T3.U_GROSSAMT- T3.U_WTax=T3.U_GROSSAMT 
+--     THEN ISNULL((SELECT A1.U_WtaxPay FROM JDT1 A0 INNER JOIN RCT2 A1 ON A0.TransId=A1.DocEntry 
+--     WHERE A0.U_ATCcode IS NOT NULL  AND A1.InvType=30  AND A1.DocNum=T3.DocNum  AND A0.Ref1=T3.DocEntry 
+--     ),0)
+--     ELSE T3.U_WTax     
+--  END AS  'DOCTOTAL'  ,
+T3.SUMAPPLIED,BASEAMNT,u_wtaxpay,T3.U_GROSSAMT,
+
+ISNULL((SELECT TI.U_ATC FROM OWHT TI
+WHERE T1.AbsEntry=T0.DocNum AND TI.WTCode = T1.WTCode ),
+ISNULL((SELECT A0.U_ATCCODE FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType
+),'')) AS 'ATC',
+
+ISNULL((SELECT TOP 1 CONCAT(TI.U_ATCDesc,TI.U_EXTDESC ) FROM OWHT TI 
+ WHERE  T1.AbsEntry =T0.DocNum AND TI.WTCode = T1.WTCode),
+ISNULL((SELECT A0.U_ATCNAME FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType
+ ),'')) AS 'ATC Description',
+
+CASE
+WHEN
+month(t0.taxdate) = '1' OR month(t0.taxdate)= '2' OR month(t0.taxdate)= '3' THEN '1'
+WHEN
+month(t0.taxdate) = '4' OR month(t0.taxdate)= '5' OR month(t0.taxdate)= '6' THEN '2'
+WHEN
+month(t0.taxdate) = '7' OR month(t0.taxdate)= '8' OR month(t0.taxdate)= '9' THEN '3'
+WHEN
+month(t0.taxdate) = '10' OR month(t0.taxdate)= '11' OR month(t0.taxdate)= '12' THEN '4'
+ELSE 'N/A'
+END AS 'QTR',
+(SELECT COUNT(*) from RCT2 T6 WHERE T6.DOCNUM = @DocNum) AS 'ROWS'
+
+FROM ORIN T0 
+LEFT JOIN RIN5 T1 ON T1.AbsEntry=T0.DocNum
+INNER JOIN RCT2 T3 ON T0.DOCNUM = T3.Docentry  AND T3.InvType=14
+
+WHERE T3.DocNum = @DOCNUM
+AND T0.CANCELED='N'
+
+ )T
+WHERE ATC LIKE '%'+@ATC+'%'
+AND ATC NOT LIKE '%WB%'
+AND ATC NOT LIKE '%WV%'
+AND QTR =@QTR
+AND T.[ATC] IS NOT NULL
+ORDER BY TaxDate
+OFFSET @GRP ROWS FETCH NEXT 15 ROWS ONLY
+
+ELSE IF (@INVnum  > 0) AND (@INV =1)
+
+SELECT *,
+ISNULL(T.WTAmnt,0)+ ISNULL(( SELECT CASE WHEN DEBIT <> 0 THEN Debit *-1 ELSE  Credit END 
+	FROM JDT1 A0 
+	WHERE U_ATCcode IS NOT NULL AND U_DocNum=T.DocEntry AND U_BASEDOCTYPE=T.InvType
+    ),0)
+AS 'wtax',
+
+CASE 
+    WHEN ROW_NUMBER() OVER (ORDER BY (SELECT 1))>@GRP THEN ROW_NUMBER() OVER (ORDER BY (SELECT 1))-@GRP 
+    ELSE ROW_NUMBER() OVER (ORDER BY (SELECT 1)) 
+    END AS 'RNUM'
+FROM(
+--ARINV
+SELECT
+CASE WHEN U_ALIAS_VENDOR IS NULL THEN CardName ELSE U_ALIAS_VENDOR END AS N1,CardName,
+T0.VatPaid,ISNULL(T3.U_wTaxComCode,T0.U_wTaxComCode) AS 'U_wTaxComCode', T3.DOCENTRY, T3.INVTYPE,T3.DocNum,Rate,
+T0.TAXDATE, 
+
+CASE 
+    WHEN (SELECT COUNT(RATE) FROM INV5 WHERE AbsEntry=T3.DocEntry)>1 
+    THEN (SELECT MAX(TaxbleAmnt) FROM INV5 WHERE AbsEntry=T3.DocEntry)
+    ELSE ISNULL(TaxbleAmnt,T0.DocTotal-T0.VatSum)
+END AS 'TaxbleAmnt',
+CASE 
+    WHEN (SELECT COUNT(RATE) FROM INV5 WHERE AbsEntry=T3.DocEntry)>1 
+    THEN ((T3.SUMAPPLIED/T0.DOCTOTAL)*(SELECT MAX(TaxbleAmnt) FROM INV5 WHERE AbsEntry=T3.DocEntry)) *(T1.RATE/100)
+    ELSE T3.U_WtaxPay
+END  AS 'WTAmnt',
+
+T0.WTSum, T0.U_WTax ,
+-- T3.U_GROSSAMT- 
+-- CASE WHEN T3.U_GROSSAMT- T3.U_WTax=T3.U_GROSSAMT 
+--     THEN ISNULL((SELECT A1.U_WtaxPay FROM JDT1 A0 INNER JOIN RCT2 A1 ON A0.TransId=A1.DocEntry 
+--     WHERE A0.U_ATCcode IS NOT NULL  AND A1.InvType=30  AND A1.DocNum=T3.DocNum  AND A0.Ref1=T3.DocEntry 
+--     ),0)
+--     ELSE T3.U_WTax     
+--  END 
+t0.DocTotal AS  'DOCTOTAL'  ,
+
+T3.SUMAPPLIED,BASEAMNT,u_wtaxpay,T3.U_GROSSAMT,
+
+ISNULL((SELECT TI.U_ATC FROM OWHT TI
+WHERE T1.AbsEntry=T0.DocNum AND TI.WTCode = T1.WTCode ),
+ISNULL((SELECT A0.U_ATCCODE FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType 
+),'')) AS 'ATC',
+
+ISNULL((SELECT TOP 1 CONCAT(TI.U_ATCDesc,TI.U_EXTDESC ) FROM OWHT TI 
+ WHERE  T1.AbsEntry =T0.DocNum AND TI.WTCode = T1.WTCode),
+ISNULL((SELECT A0.U_ATCNAME FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType
+ ),'')) AS 'ATC Description',
+
+CASE
+WHEN
+month(t0.taxdate) = '1' OR month(t0.taxdate)= '2' OR month(t0.taxdate)= '3' THEN '1'
+WHEN
+month(t0.taxdate) = '4' OR month(t0.taxdate)= '5' OR month(t0.taxdate)= '6' THEN '2'
+WHEN
+month(t0.taxdate) = '7' OR month(t0.taxdate)= '8' OR month(t0.taxdate)= '9' THEN '3'
+WHEN
+month(t0.taxdate) = '10' OR month(t0.taxdate)= '11' OR month(t0.taxdate)= '12' THEN '4'
+ELSE 'N/A'
+END AS 'QTR',
+
+(SELECT COUNT(*) from RCT2 T6 WHERE T6.DOCNUM = @DocNum) AS 'ROWS'
+
+FROM OINV T0 
+LEFT JOIN INV5 T1 ON T1.AbsEntry=T0.DocNum
+INNER JOIN RCT2 T3 ON T0.DOCNUM= T3.Docentry
+
+WHERE T3.DocNum = @DOCNUM AND T0.DocNum=@INVnum
+AND T0.CANCELED='N'
+AND T3.InvType=13
+
+ )T
+WHERE ATC LIKE '%'+@ATC+'%'
+AND ATC NOT LIKE '%WB%'
+AND ATC NOT LIKE '%WV%'
+AND QTR =@QTR
+AND T.[ATC] IS NOT NULL
+ORDER BY TaxDate
+
+ELSE IF (@INVnum  > 0) AND (@INV =2)
+--ARDPI
+SELECT *,
+ISNULL(T.WTAmnt,0)+ ISNULL(( SELECT CASE WHEN DEBIT <> 0 THEN Debit *-1 ELSE  Credit END 
+	FROM JDT1 A0 
+	WHERE U_ATCcode IS NOT NULL AND U_DocNum=T.DocEntry AND U_BASEDOCTYPE=T.InvType
+    ),0)
+AS 'wtax',
+
+CASE 
+    WHEN ROW_NUMBER() OVER (ORDER BY (SELECT 1))>@GRP THEN ROW_NUMBER() OVER (ORDER BY (SELECT 1))-@GRP 
+    ELSE ROW_NUMBER() OVER (ORDER BY (SELECT 1)) 
+    END AS 'RNUM'
+FROM(
+SELECT
+CASE WHEN U_ALIAS_VENDOR IS NULL THEN CardName ELSE U_ALIAS_VENDOR END AS N1,CardName,
+T0.VatPaid,ISNULL(T3.U_wTaxComCode,T0.U_wTaxComCode) AS 'U_wTaxComCode', T3.DOCENTRY, T3.INVTYPE,T3.DocNum,Rate,
+T0.TAXDATE, 
+
+CASE 
+    WHEN (SELECT COUNT(RATE) FROM DPI5 WHERE AbsEntry=T3.DocEntry)>1 
+    THEN (SELECT MAX(TaxbleAmnt) FROM DPI5 WHERE AbsEntry=T3.DocEntry)
+    ELSE ISNULL(TaxbleAmnt,T0.DocTotal-T0.VatSum)
+END AS 'TaxbleAmnt',
+CASE 
+    WHEN (SELECT COUNT(RATE) FROM DPI5 WHERE AbsEntry=T3.DocEntry)>1 
+    THEN ((T3.SUMAPPLIED/T0.DOCTOTAL)*(SELECT MAX(TaxbleAmnt) FROM DPI5 WHERE AbsEntry=T3.DocEntry)) *(T1.RATE/100)
+    ELSE T3.U_WtaxPay
+END  AS 'WTAmnt',
+
+T0.WTSum, T0.U_WTax,
+T3.U_GROSSAMT- 
+CASE WHEN T3.U_GROSSAMT- T3.U_WTax=T3.U_GROSSAMT 
+    THEN ISNULL((SELECT A1.U_WtaxPay FROM JDT1 A0 INNER JOIN RCT2 A1 ON A0.TransId=A1.DocEntry 
+    WHERE A0.U_ATCcode IS NOT NULL  AND A1.InvType=30  AND A1.DocNum=T3.DocNum  AND A0.Ref1=T3.DocEntry 
+    ),0)
+    ELSE T3.U_WTax     
+ END AS  'DOCTOTAL'  ,
+T3.SUMAPPLIED,BASEAMNT,u_wtaxpay,T3.U_GROSSAMT,
+
+ISNULL((SELECT TI.U_ATC FROM OWHT TI
+WHERE T1.AbsEntry=T0.DocNum AND TI.WTCode = T1.WTCode ),
+ISNULL((SELECT A0.U_ATCCODE FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType
+),'')) AS 'ATC',
+
+ISNULL((SELECT TOP 1 CONCAT(TI.U_ATCDesc,TI.U_EXTDESC ) FROM OWHT TI 
+ WHERE  T1.AbsEntry =T0.DocNum AND TI.WTCode = T1.WTCode),
+ISNULL((SELECT A0.U_ATCNAME FROM JDT1 A0 WHERE U_ATCcode IS NOT NULL AND U_DocNum=T3.DocEntry AND U_BASEDOCTYPE=T3.InvType
+ ),'')) AS 'ATC Description',
+
+CASE
+WHEN
+month(t0.taxdate) = '1' OR month(t0.taxdate)= '2' OR month(t0.taxdate)= '3' THEN '1'
+WHEN
+month(t0.taxdate) = '4' OR month(t0.taxdate)= '5' OR month(t0.taxdate)= '6' THEN '2'
+WHEN
+month(t0.taxdate) = '7' OR month(t0.taxdate)= '8' OR month(t0.taxdate)= '9' THEN '3'
+WHEN
+month(t0.taxdate) = '10' OR month(t0.taxdate)= '11' OR month(t0.taxdate)= '12' THEN '4'
+ELSE 'N/A'
+END AS 'QTR',
+
+(SELECT COUNT(*) from RCT2 T6 WHERE T6.DOCNUM = @DocNum) AS 'ROWS'
+
+FROM ODPI T0 
+LEFT JOIN DPI5 T1 ON T1.AbsEntry=T0.DocNum
+INNER JOIN RCT2 T3 ON T0.DOCNUM= T3.Docentry
+
+WHERE T3.DocNum = @DOCNUM AND T0.DocNum=@INVnum
+AND T0.CANCELED='N'
+AND T3.InvType=203
+
+ )T
+WHERE ATC LIKE '%'+@ATC+'%'
+AND ATC NOT LIKE '%WB%'
+AND ATC NOT LIKE '%WV%'
+AND QTR =@QTR
+AND T.[ATC] IS NOT NULL
+ORDER BY TaxDate
