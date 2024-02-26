@@ -32,12 +32,12 @@ BEGIN
     [INVOICE NO.],
     D.Number,
 
-    CASE WHEN D.[DE-AP]<>0 
+    ISNULL(CASE WHEN D.[DE-AP]<>0 
     THEN convert(varchar(20),OJDT.Number)
     WHEN TYPE='AR RESERVE' AND (SELECT COUNT(BASEENTRY) FROM DLN1 WHERE BaseEntry=D.Transaction# AND DLN1.ItemCode=D.[Item Code])=0
     THEN CONCAT('AR - ',D.Transaction# )
     ELSE convert(varchar(20),D.Number)
-    END AS 'JE-COST',
+    END, D.Number) AS 'JE-COST',
 
     Reference,
     ReferenceDate,
