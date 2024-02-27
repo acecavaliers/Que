@@ -23,7 +23,7 @@ BEGIN
  
 
     SELECT 
-    DISTINCT
+    -- DISTINCT
     Department,
     Category,
     TRANSACTION#,
@@ -700,7 +700,7 @@ SELECT T2.ItmsGrpNam AS 'Department',T3.CANCELED,T1.SWW,'' AS 'DE-AP', '' AS 'TR
     AND  T3.U_BO_DRS ='Y' OR T3.U_BO_DSDD ='Y' OR T3.U_BO_DSDV ='Y' OR T3.U_BO_DSPD ='Y'  
 
 
-     UNION ALL --DS AP EXCESS TO PO
+    UNION ALL --DS AP EXCESS TO PO
 
     SELECT DISTINCT T2.ItmsGrpNam AS 'Department',T3.CANCELED,T1.SWW,
 
