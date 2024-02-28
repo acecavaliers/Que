@@ -23,7 +23,7 @@ BEGIN
  
 
     SELECT 
-    -- DISTINCT
+    DISTINCT
     Department,
     Category,
     TRANSACTION#,
